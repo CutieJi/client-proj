@@ -46,19 +46,10 @@ A modern, minimal inventory app for the handwritten building-material price list
    ```
 
 7. Visit `http://localhost:3000` to open the login page (`public/index.html`) and sign in with the admin username and
-   password you set in SQL. The inventory dashboard is a separate page served at `/dashboard.html` from the protected
-   `views/dashboard.html` template and requires a valid
+   password you set in SQL. The inventory dashboard is a separate page at `public/dashboard.html` and requires a valid
    session. The admin-only **User management** page creates, edits, and deletes accounts through restricted database
    functions. Apply `supabase/schema.sql` first to install these functions. There is no public registration;
    account-write APIs require an administrator session.
-
-## Deploying to Vercel
-
-Import this project into Vercel and use the Express framework preset (Vercel can detect the root `server.js` Express
-app). Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `NODE_ENV=production` in the Vercel project's Environment
-Variables, then redeploy. The app exports the Express application for Vercel while retaining `npm start` for local
-development. Static assets are in `public/`; the protected dashboard is stored in `views/` so Vercel's static CDN
-cannot bypass the server-side login check. No separate API URL or client-side deployment rewrite is needed.
 
 ## Important security note
 
