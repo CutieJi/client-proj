@@ -333,5 +333,4 @@ app.get("/{*path}", (req, res) => {
 if (require.main === module) {
   app.listen(port, () => console.log(`Materials Inventory running at http://localhost:${port}`));
 }
-
 module.exports = app;
