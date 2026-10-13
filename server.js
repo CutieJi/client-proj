@@ -119,7 +119,7 @@ function adminRequired(req, res, next) {
   next();
 }
 app.get("/dashboard.html", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "views", "dashboard.html"));
+  res.sendFile(path.join(__dirname, "public", "dashboard.html"));
 });
 app.use(express.static(path.join(__dirname, "public")));
 
