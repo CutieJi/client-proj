@@ -247,15 +247,15 @@ button {
     border-bottom: 1px solid var(--line);
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 12px;
     padding: 0 34px
 }
 
 .crumb {
     color: #8992a0;
     font-size: 12px;
-    margin-right: auto;
-    margin-left: 12px
+    margin: 0
 }
 
 .crumb span {
@@ -271,7 +271,8 @@ button {
 .topbar-right {
     display: flex;
     align-items: center;
-    gap: 17px
+    gap: 17px;
+    margin-left: auto
 }
 
 .account-display-name {
@@ -1033,8 +1034,7 @@ body.dark .table-footer {
     }
 
     .crumb {
-        margin-right: auto;
-        margin-left: 12px
+        margin: 0
     }
 
     .topbar-right {
