@@ -119,7 +119,7 @@ function adminRequired(req, res, next) {
   next();
 }
 app.get("/dashboard.html", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "dashboard.html"));
+  res.sendFile(path.join(__dirname, "views", "dashboard.html"));
 });
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -330,4 +330,8 @@ app.get("/api/transactions", async (req, res) => {
 app.get("/{*path}", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
-app.listen(port, () => console.log(`Materials Inventory running at http://localhost:${port}`));
+if (require.main === module) {
+  app.listen(port, () => console.log(`Materials Inventory running at http://localhost:${port}`));
+}
+
+module.exports = app;
