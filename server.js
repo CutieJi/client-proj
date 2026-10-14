@@ -674,12 +674,6 @@ async function saveClientOrder(req, res, userId, isCustomer = false) {
     if (error.code === "P0001") return res.status(400).json({ error: error.message });
     return fail(res, error);
   }
-  if (!await recordActivity(req, res, {
-    action: "order.placed",
-    entityType: "client_order",
-    entityId: orderId,
-    summary: `${isCustomer ? "Customer" : "Staff"} order ${orderId} recorded with ${quantities.size} item type${quantities.size === 1 ? "" : "s"}.`
-  })) return;
   const { data: savedOrder, error: orderReadError } = await supabase.from("client_orders")
     .select("id,receipt_number,created_at,client_name,client_email,client_phone,note,total,client_order_items(item_name,unit,quantity,unit_price,line_total)")
     .eq("id", orderId).single();
@@ -689,7 +683,20 @@ async function saveClientOrder(req, res, userId, isCustomer = false) {
       error: `Order ${orderId} was saved, but its receipt could not be loaded. Do not submit it again; contact the administrator.`
     });
   }
-  const referenceNumber = `OR-${String(savedOrder.receipt_number).padStart(8, "0")}`;
+  const receiptNumber = Number(savedOrder.receipt_number);
+  if (!Number.isSafeInteger(receiptNumber) || receiptNumber < 1) {
+    console.error("Order was saved, but its receipt number is invalid. Apply the latest supabase/schema.sql.");
+    return res.status(503).json({
+      error: `Order ${orderId} was saved, but its receipt reference is unavailable. Do not submit it again; apply the latest supabase/schema.sql and contact the administrator.`
+    });
+  }
+  const referenceNumber = `OR-${String(receiptNumber).padStart(8, "0")}`;
+  if (!await recordActivity(req, res, {
+    action: "order.placed",
+    entityType: "client_order",
+    entityId: orderId,
+    summary: `${isCustomer ? "Customer" : "Staff"} order ${referenceNumber} recorded with ${quantities.size} item type${quantities.size === 1 ? "" : "s"}.`
+  })) return;
   res.status(201).json({ ...savedOrder, reference_number: referenceNumber });
 }
 

@@ -147,6 +147,26 @@
       </div>
     </section>
   </div>
+  <div class="modal-backdrop hidden" id="customerOrderConfirmModal">
+    <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="customerOrderConfirmTitle">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">CONFIRM ORDER</p>
+          <h2 id="customerOrderConfirmTitle">Are you sure?</h2>
+        </div>
+      </div>
+      <p class="delete-message">Submit your order?</p>
+      <div class="order-confirm-summary">
+        <span id="customerConfirmItemCount"></span>
+        <strong id="customerConfirmTotal"></strong>
+      </div>
+      <p class="receipt-disclaimer">This records your order and updates inventory. No payment is processed.</p>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" data-close="customerOrderConfirmModal">Cancel</button>
+        <button type="button" class="primary-button" id="confirmCustomerOrderBtn">Confirm order</button>
+      </div>
+    </section>
+  </div>
   <div class="modal-backdrop hidden" id="customerReceiptModal">
     <section class="modal compact-modal receipt-modal" role="dialog" aria-modal="true" aria-labelledby="customerReceiptTitle">
       <div class="modal-heading">

@@ -22,6 +22,7 @@ A modern, minimal inventory app for the handwritten building-material price list
 - Admin-only account management for staff, customer, and administrator accounts
 - Admin-only activity logs for customer, staff, and administrator sign-ins, account changes, inventory changes, stock movements, and orders
 - Customer and staff order receipts with a unique reference number and printable receipt view
+- In-app order confirmation before submitting; blue payment-style receipts clearly indicate that payment was not processed
 - Staff and administrator profile editing from the dashboard account menu
 - Account sorting, self-service password changes, and confirmed sign-out
 - Responsive layout and light/dark mode

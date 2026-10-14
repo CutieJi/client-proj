@@ -271,8 +271,15 @@ async function loadActivityLogs() {
 function showOrderReceipt(order) {
   const items = order.client_order_items || [];
   $("receiptContent").innerHTML = `
-    <div class="receipt-brand">MATERIALS INVENTORY</div>
-    <h3>ORDER RECEIPT</h3>
+    <div class="receipt-hero">
+      <span class="receipt-success-icon" aria-hidden="true">✓</span>
+      <strong class="receipt-status">ORDER CONFIRMED</strong>
+      <span class="receipt-brand">MATERIALS INVENTORY</span>
+      <strong class="receipt-amount">${money(order.total)}</strong>
+      <span class="receipt-amount-label">Order total</span>
+      <span class="receipt-payment-status">Payment not processed</span>
+    </div>
+    <h3>Order receipt</h3>
     <p class="receipt-reference"><span>Reference number</span><strong>${esc(order.reference_number)}</strong></p>
     <div class="receipt-meta">
       <span>Date</span><strong>${esc(dateTime(order.created_at))}</strong>
@@ -563,7 +570,13 @@ $("orderForm").addEventListener("submit", async event => {
     $("orderError").textContent = "Choose a material and enter a quantity greater than zero for every order line.";
     return;
   }
-  if (!window.confirm("Are you sure you want to place this order?")) return;
+  $("orderConfirmClient").textContent = $("orderClientName").value.trim();
+  $("orderConfirmItems").textContent = `${state.orderLines.length} item${state.orderLines.length === 1 ? "" : "s"}`;
+  $("orderConfirmTotal").textContent = $("orderTotal").textContent;
+  openModal("orderConfirmModal");
+});
+$("confirmOrderBtn").addEventListener("click", async () => {
+  closeModal("orderConfirmModal");
   const button = $("saveOrderBtn");
   button.disabled = true;
   try {

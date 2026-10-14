@@ -1097,6 +1097,34 @@ tbody tr:hover {
     font-size: 12px
 }
 
+.receipt-hero {
+    display: grid;
+    justify-items: center;
+    gap: 7px;
+    padding: 20px 16px 17px;
+    border-radius: 12px;
+    background: linear-gradient(145deg, #0758c7, #087dde 55%, #13a9df);
+    color: #fff;
+    text-align: center
+}
+
+.receipt-success-icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    margin-bottom: 2px;
+    border: 2px solid #ffffffc7;
+    border-radius: 50%;
+    font-size: 20px;
+    font-weight: 700
+}
+
+.receipt-status {
+    font-size: 11px;
+    letter-spacing: 1px
+}
+
 .receipt-brand {
     text-align: center;
     color: var(--muted);
@@ -1105,10 +1133,38 @@ tbody tr:hover {
     letter-spacing: 1.4px
 }
 
+.receipt-hero .receipt-brand {
+    color: #d9edff;
+    font-size: 9px;
+    margin-top: 2px
+}
+
+.receipt-amount {
+    margin-top: 7px;
+    font-size: 29px;
+    line-height: 1.1;
+    letter-spacing: -.6px
+}
+
+.receipt-amount-label {
+    color: #d9edff;
+    font-size: 11px
+}
+
+.receipt-payment-status {
+    margin-top: 5px;
+    padding: 5px 10px;
+    border: 1px solid #ffffff55;
+    border-radius: 20px;
+    background: #ffffff18;
+    font-size: 10px;
+    font-weight: 600
+}
+
 .receipt-content h3 {
-    text-align: center;
-    font-size: 19px;
-    margin: 8px 0 16px
+    text-align: left;
+    font-size: 14px;
+    margin: 18px 0 10px
 }
 
 .receipt-reference {
@@ -1116,9 +1172,10 @@ tbody tr:hover {
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    padding: 10px 0;
-    border-top: 1px dashed var(--line);
-    border-bottom: 1px dashed var(--line)
+    padding: 11px 12px;
+    border: 1px solid #dceafa;
+    border-radius: 8px;
+    background: #f2f7fd
 }
 
 .receipt-reference span,
@@ -1130,7 +1187,8 @@ tbody tr:hover {
 
 .receipt-reference strong {
     font-size: 15px;
-    letter-spacing: .6px
+    letter-spacing: .6px;
+    color: #075fc5
 }
 
 .receipt-meta {
@@ -1199,6 +1257,23 @@ tbody tr:hover {
     text-align: center;
     font-size: 10px;
     margin: 4px 0 0
+}
+
+.order-confirm-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 14px;
+    margin: 16px 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-soft)
+}
+
+.order-confirm-summary strong {
+    color: #075fc5;
+    font-size: 16px
 }
 
 .icon-button {

@@ -106,7 +106,12 @@ $("clientOrderForm").addEventListener("submit", async event => {
     $("clientOrderError").textContent = "Add at least one available material to your order.";
     return;
   }
-  if (!window.confirm("Are you sure you want to place this order?")) return;
+  $("customerConfirmItemCount").textContent = `${state.cart.length} item${state.cart.length === 1 ? "" : "s"}`;
+  $("customerConfirmTotal").textContent = $("clientOrderTotal").textContent;
+  $("customerOrderConfirmModal").classList.remove("hidden");
+});
+$("confirmCustomerOrderBtn").addEventListener("click", async () => {
+  $("customerOrderConfirmModal").classList.add("hidden");
   const button = $("submitClientOrder");
   button.disabled = true;
   try {
@@ -134,8 +139,15 @@ $("clientOrderForm").addEventListener("submit", async event => {
 function showCustomerOrderReceipt(order) {
   const items = order.client_order_items || [];
   $("customerReceiptContent").innerHTML = `
-    <div class="receipt-brand">MATERIALS INVENTORY</div>
-    <h3>ORDER RECEIPT</h3>
+    <div class="receipt-hero">
+      <span class="receipt-success-icon" aria-hidden="true">✓</span>
+      <strong class="receipt-status">ORDER CONFIRMED</strong>
+      <span class="receipt-brand">MATERIALS INVENTORY</span>
+      <strong class="receipt-amount">${money(order.total)}</strong>
+      <span class="receipt-amount-label">Order total</span>
+      <span class="receipt-payment-status">Payment not processed</span>
+    </div>
+    <h3>Order receipt</h3>
     <p class="receipt-reference"><span>Reference number</span><strong>${esc(order.reference_number)}</strong></p>
     <div class="receipt-meta">
       <span>Date</span><strong>${esc(new Date(order.created_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" }))}</strong>
