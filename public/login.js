@@ -27,10 +27,35 @@ async function api(url, options = {}) {
 }
 
 api("/api/auth/me")
-  .then(() => window.location.replace("/dashboard.html"))
+  .then(({ user }) => window.location.replace(user.role === "customer" ? "/customer.html" : "/dashboard.html"))
   .catch(error => {
     if (error.status !== 401) $("loginError").textContent = error.message;
   });
+
+let registrationMode = false;
+$("registerPhoneNumber").addEventListener("input", event => {
+  event.target.value = event.target.value.replace(/\D/g, "").slice(0, 11);
+});
+$("registerPassword").addEventListener("input", () => {
+  $("registerConfirmPassword").setCustomValidity("");
+});
+$("registerConfirmPassword").addEventListener("input", () => {
+  const matches = $("registerConfirmPassword").value === $("registerPassword").value;
+  $("registerConfirmPassword").setCustomValidity(matches ? "" : "Passwords do not match.");
+});
+$("authToggle").addEventListener("click", () => {
+  registrationMode = !registrationMode;
+  $("loginForm").classList.toggle("hidden", registrationMode);
+  $("registerForm").classList.toggle("hidden", !registrationMode);
+  $("authTitle").textContent = registrationMode ? "Create customer account" : "Sign in";
+  document.querySelector(".login-card").classList.toggle("registering", registrationMode);
+  $("authSubtitle").textContent = registrationMode
+    ? "Create an account to order materials."
+    : "Sign in to order materials or access the staff workspace.";
+  $("authToggle").textContent = registrationMode ? "Already have an account? Sign in" : "New customer? Create an account";
+  $("loginError").textContent = "";
+  $("registerError").textContent = "";
+});
 
 $("loginForm").addEventListener("submit", async event => {
   event.preventDefault();
@@ -41,13 +66,44 @@ $("loginForm").addEventListener("submit", async event => {
     await api("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({
-        username: $("loginUsername").value,
+        identifier: $("loginUsername").value,
         password: $("loginPassword").value
       })
     });
-    window.location.replace("/dashboard.html?logged_in=1");
+    const { user } = await api("/api/auth/me");
+    window.location.replace(user.role === "customer" ? "/customer.html" : "/dashboard.html?logged_in=1");
   } catch (error) {
     $("loginError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("registerForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  $("registerError").textContent = "";
+  if ($("registerPassword").value !== $("registerConfirmPassword").value) {
+    $("registerConfirmPassword").setCustomValidity("Passwords do not match.");
+    $("registerConfirmPassword").reportValidity();
+    return;
+  }
+  const button = $("registerButton");
+  button.disabled = true;
+  try {
+    await api("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({
+        display_name: $("registerDisplayName").value,
+        username: $("registerUsername").value,
+        email: $("registerEmail").value,
+        phone_number: $("registerPhoneNumber").value,
+        password: $("registerPassword").value,
+        confirm_password: $("registerConfirmPassword").value
+      })
+    });
+    window.location.replace("/customer.html");
+  } catch (error) {
+    $("registerError").textContent = error.message;
   } finally {
     button.disabled = false;
   }

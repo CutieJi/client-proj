@@ -26,6 +26,11 @@
           <path d="M14 8a.5.5 0 0 1-.5.5H3.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 0 1 .708.708L3.707 7.5H13.5A.5.5 0 0 1 14 8m-12-5a.5.5 0 0 1 .5-.5h9.793l-2.147-2.146a.5.5 0 0 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L12.293 3.5H2.5A.5.5 0 0 1 2 3" transform="translate(0 2)" />
         </svg></span> Stock movements
       </button>
+      <button class="nav-link" data-view="orders">
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
+          <path d="M2 1h12a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1m0 2v10h12V3zm2 2h8v1H4zm0 3h8v1H4zm0 3h5v1H4z" />
+        </svg></span> Client orders
+      </button>
       <button class="nav-link hidden" data-view="users" id="usersNavLink">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
           <path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-7.5 6c.3-.8.9-2.2 2-3.2-.5-.2-1-.3-1.5-.3-3 0-4 2.3-4 3.2 0 .2.1.3.3.3zM4 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
@@ -153,11 +158,26 @@
             </table>
           </div>
         </section>
+        <section class="panel hidden" id="ordersPanel">
+          <div class="panel-header">
+            <div>
+              <h2>Client orders</h2>
+              <p>Saved orders, order totals, and the inventory they used.</p>
+            </div><button class="primary-button" id="newOrderBtn" type="button">＋ Record client order</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Client</th><th>Items</th><th>Order total</th><th>Recorded by</th></tr></thead>
+              <tbody id="ordersBody"><tr><td colspan="5" class="empty-cell">Loading client orders…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="table-footer"><span>Showing the 100 most recent orders</span><span>Prices in Philippine pesos (₱)</span></div>
+        </section>
         <section class="panel hidden" id="usersPanel">
           <div class="panel-header">
             <div>
               <h2>Application accounts</h2>
-              <p>Administrators can add, edit, and remove accounts.</p>
+              <p>Staff can manage user and customer accounts. Only administrators can manage administrator accounts or grant administrator access.</p>
             </div>
             <div class="toolbar">
               <select id="userSort" aria-label="Sort accounts">
@@ -174,8 +194,8 @@
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Username</th><th>Display name</th><th>Role</th><th>Date added</th><th></th></tr></thead>
-              <tbody id="usersBody"><tr><td colspan="5" class="empty-cell">Loading accounts…</td></tr></tbody>
+              <thead><tr><th>Username</th><th>Email</th><th>Phone</th><th>Display name</th><th>Role</th><th>Date added</th><th></th></tr></thead>
+              <tbody id="usersBody"><tr><td colspan="7" class="empty-cell">Loading accounts…</td></tr></tbody>
             </table>
           </div>
         </section>
@@ -269,6 +289,31 @@
       </form>
     </section>
   </div>
+  <div class="modal-backdrop hidden" id="orderModal">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">CLIENT ORDER</p>
+          <h2 id="orderModalTitle">Record client order</h2>
+        </div><button class="icon-button close-modal" data-close="orderModal" aria-label="Close">×</button>
+      </div>
+      <form id="orderForm">
+        <label class="field">Client name *<input id="orderClientName" maxlength="120" autocomplete="name" required
+            placeholder="Enter the client's name"></label>
+        <div class="order-lines-heading">
+          <strong>Order items</strong>
+          <button class="secondary-button" id="addOrderLineBtn" type="button">＋ Add item</button>
+        </div>
+        <div id="orderLines" class="order-lines"></div>
+        <label class="field">Note<textarea id="orderNote" rows="2" maxlength="500"
+            placeholder="Optional delivery or order details"></textarea></label>
+        <div class="order-total"><span>Order total</span><strong id="orderTotal">₱0.00</strong></div>
+        <p class="form-error" id="orderError" role="alert"></p>
+        <div class="modal-actions"><button type="button" class="secondary-button"
+            data-close="orderModal">Cancel</button><button type="submit" class="primary-button" id="saveOrderBtn">Save order</button></div>
+      </form>
+    </section>
+  </div>
   <div class="modal-backdrop hidden" id="deleteModal">
     <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
       <div class="modal-heading">
@@ -294,14 +339,19 @@
       </div>
       <form id="accountForm">
         <input type="hidden" id="accountId">
-        <label class="field">Username *<input id="accountUsername" minlength="3" maxlength="32"
+        <label class="field"><span class="field-label">Username <span class="required-mark">*</span></span><input id="accountUsername" minlength="3" maxlength="32"
             pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,31}" autocomplete="off" required>
           <small>3–32 characters: letters, numbers, periods, underscores, or hyphens.</small></label>
-        <label class="field">Display name *<input id="accountDisplayName" maxlength="120" autocomplete="name" required></label>
+        <label class="field"><span class="field-label">Email address <span class="required-mark">*</span></span><input id="accountEmail" type="email" maxlength="254"
+            autocomplete="email" required placeholder="you@example.com"></label>
+        <label class="field"><span class="field-label">Phone number <span class="required-mark">*</span></span><input id="accountPhoneNumber" type="text" maxlength="32"
+            autocomplete="tel" inputmode="numeric" pattern="[0-9]{11}" required
+            placeholder="09123456789"><small>Enter exactly 11 digits.</small></label>
+        <label class="field"><span class="field-label">Display name <span class="required-mark">*</span></span><input id="accountDisplayName" maxlength="120" autocomplete="name" required></label>
         <label class="field">Password <input id="accountPassword" type="password" minlength="8"
             autocomplete="new-password"><small id="accountPasswordHint">At least 8 characters.</small></label>
-        <label class="field">Role *<select id="accountRole" required>
-            <option value="user">User</option><option value="admin">Administrator</option>
+        <label class="field"><span class="field-label">Role <span class="required-mark">*</span></span><select id="accountRole" required>
+            <option value="user">User</option><option value="admin">Administrator</option><option value="customer">Customer</option>
           </select></label>
         <p class="form-error" id="accountError" role="alert"></p>
         <div class="modal-actions"><button type="button" class="secondary-button"

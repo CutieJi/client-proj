@@ -10,16 +10,36 @@
 
 <body>
   <main class="login-screen">
-    <form class="login-card" id="loginForm">
+    <section class="login-card" aria-labelledby="authTitle">
       <img class="brand-mark brand-logo login-brand" src="/logo.png" alt="Materials Inventory logo">
       <p class="eyebrow">MATERIALS MANAGEMENT</p>
-      <h1>Sign in</h1>
-      <p class="subheading">Sign in to access the inventory workspace.</p>
-      <label class="field">Username<input id="loginUsername" autocomplete="username" required></label>
-      <label class="field">Password<input id="loginPassword" type="password" autocomplete="current-password" required></label>
-      <p class="form-error" id="loginError" role="alert"></p>
-      <button class="primary-button" type="submit" id="loginButton">Sign in</button>
-    </form>
+      <h1 id="authTitle">Sign in</h1>
+      <p class="subheading" id="authSubtitle">Sign in to order materials or access the staff workspace.</p>
+      <form id="loginForm">
+        <label class="field"><span class="field-label">Email or username <span class="required-mark">*</span></span><input id="loginUsername" autocomplete="username" required></label>
+        <label class="field"><span class="field-label">Password <span class="required-mark">*</span></span><input id="loginPassword" type="password" autocomplete="current-password" required></label>
+        <p class="form-error" id="loginError" role="alert"></p>
+        <button class="primary-button" type="submit" id="loginButton">Sign in</button>
+      </form>
+      <form id="registerForm" class="registration-form hidden">
+        <label class="field"><span class="field-label">Your name <span class="required-mark">*</span></span><input id="registerDisplayName" maxlength="120" autocomplete="name" required></label>
+        <label class="field"><span class="field-label">Username <span class="required-mark">*</span></span><input id="registerUsername" minlength="3" maxlength="32"
+            pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,31}" autocomplete="username" required>
+          <small>3–32 characters: letters, numbers, periods, underscores, or hyphens.</small></label>
+        <label class="field"><span class="field-label">Email address <span class="required-mark">*</span></span><input id="registerEmail" type="email" maxlength="254"
+            autocomplete="email" required placeholder="you@example.com"></label>
+        <label class="field"><span class="field-label">Phone number <span class="required-mark">*</span></span><input id="registerPhoneNumber" type="text" maxlength="32"
+            autocomplete="tel" inputmode="numeric" pattern="[0-9]{11}" required
+            placeholder="09123456789"><small>Enter exactly 11 digits.</small></label>
+        <label class="field"><span class="field-label">Password <span class="required-mark">*</span></span><input id="registerPassword" type="password" minlength="8"
+            autocomplete="new-password" required><small>At least 8 characters.</small></label>
+        <label class="field"><span class="field-label">Confirm password <span class="required-mark">*</span></span><input id="registerConfirmPassword"
+            type="password" minlength="8" autocomplete="new-password" required></label>
+        <p class="form-error" id="registerError" role="alert"></p>
+        <button class="primary-button" type="submit" id="registerButton">Create customer account</button>
+      </form>
+      <button class="public-order-link auth-toggle" id="authToggle" type="button">New customer? Create an account</button>
+    </section>
   </main>
   <div class="toast" id="loginToast" role="status"></div>
   <script src="/login.js"></script>

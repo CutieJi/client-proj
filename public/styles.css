@@ -53,12 +53,14 @@ button {
     min-height: 100vh;
     display: grid;
     place-items: center;
-    padding: 22px
+    padding: 14px
 }
 
 .login-card {
     width: min(420px, 100%);
-    padding: 32px;
+    max-height: calc(100vh - 28px);
+    overflow-y: auto;
+    padding: 24px;
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 10px;
@@ -68,8 +70,18 @@ button {
 .login-brand {
     width: 52px;
     height: 52px;
-    margin-bottom: 22px;
+    margin-bottom: 14px;
     border-radius: 12px
+}
+
+.login-card.registering {
+    width: min(600px, 100%)
+}
+
+.registration-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 16px
 }
 
 .login-card h1 {
@@ -77,11 +89,11 @@ button {
 }
 
 .login-card .subheading {
-    margin-bottom: 23px
+    margin-bottom: 16px
 }
 
 .login-card .field {
-    margin-bottom: 16px
+    margin-bottom: 10px
 }
 
 .login-card .primary-button {
@@ -95,6 +107,294 @@ button {
 .login-card button:disabled {
     cursor: wait;
     opacity: .65
+}
+
+.auth-toggle {
+    width: 100%;
+    border: 0;
+    background: transparent
+}
+
+.public-order-link {
+    display: block;
+    margin-top: 17px;
+    color: #315f9d;
+    font-size: 12px;
+    text-align: center;
+    text-decoration: none
+}
+
+@media(max-height:720px) {
+    .login-screen {
+        padding-block: 8px
+    }
+
+    .login-card {
+        padding: 18px
+    }
+
+    .login-brand {
+        width: 42px;
+        height: 42px;
+        margin-bottom: 8px
+    }
+
+    .login-card .subheading {
+        margin-bottom: 10px
+    }
+
+    .login-card .field {
+        margin-bottom: 7px
+    }
+
+    .login-card .field input {
+        padding-block: 7px
+    }
+
+    .public-order-link {
+        margin-top: 10px
+    }
+}
+
+@media(max-height:700px) {
+    .login-card.registering .login-brand,
+    .login-card.registering>.eyebrow {
+        display: none
+    }
+
+    .login-card.registering h1 {
+        margin-top: 0
+    }
+}
+
+@media(max-height:480px) {
+    .login-brand,
+    .login-card>.eyebrow {
+        display: none
+    }
+
+    .login-card {
+        padding: 12px
+    }
+
+    .login-card .subheading {
+        margin-bottom: 6px
+    }
+
+    .login-card .form-error {
+        margin-top: 2px;
+        margin-bottom: 2px
+    }
+
+    .login-card .primary-button {
+        padding-block: 7px
+    }
+
+    .public-order-link {
+        margin-top: 5px
+    }
+}
+
+.public-order-link:hover {
+    text-decoration: underline
+}
+
+.client-order-page {
+    min-height: 100vh;
+    background: var(--bg)
+}
+
+.client-order-header {
+    min-height: 70px;
+    padding: 12px max(22px, calc((100vw - 1180px) / 2));
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px
+}
+
+.client-order-header .brand {
+    color: #263449
+}
+
+.client-order-header .secondary-button {
+    text-decoration: none
+}
+
+.customer-account {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 12px
+}
+
+.customer-account button:disabled {
+    cursor: wait;
+    opacity: .65
+}
+
+.client-order-main {
+    width: min(1180px, calc(100% - 44px));
+    margin: 36px auto
+}
+
+.client-order-intro {
+    margin-bottom: 20px
+}
+
+.client-order-intro h1 {
+    margin: 8px 0
+}
+
+.client-order-intro .subheading {
+    margin-bottom: 0
+}
+
+.client-order-status {
+    color: var(--green);
+    font-size: 13px;
+    font-weight: 700
+}
+
+.client-order-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 370px);
+    align-items: start;
+    gap: 20px
+}
+
+.client-catalog-panel,
+.client-checkout-panel {
+    min-width: 0
+}
+
+.client-catalog {
+    display: grid;
+    gap: 1px;
+    background: var(--line)
+}
+
+.client-product-card {
+    background: var(--surface);
+    padding: 18px 21px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px
+}
+
+.client-product-info {
+    min-width: 0
+}
+
+.client-product-info h3 {
+    margin: 11px 0 4px;
+    color: var(--text);
+    font-size: 14px
+}
+
+.client-product-info p {
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-size: 11px
+}
+
+.client-product-info>strong {
+    display: block;
+    color: var(--text);
+    font-size: 13px
+}
+
+.client-product-info>strong small {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 400
+}
+
+.client-stock {
+    display: block;
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 10px
+}
+
+.client-product-actions {
+    width: 138px;
+    flex: 0 0 138px;
+    display: grid;
+    gap: 9px
+}
+
+.client-product-actions .primary-button {
+    width: 100%;
+    padding: 9px 7px
+}
+
+.client-cart {
+    padding: 0 21px;
+    max-height: 300px;
+    overflow: auto
+}
+
+.client-cart-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line)
+}
+
+.client-cart-line strong,
+.client-cart-line small {
+    display: block
+}
+
+.client-cart-line strong {
+    color: var(--text);
+    font-size: 11px
+}
+
+.client-cart-line small {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 10px
+}
+
+.client-order-total {
+    margin: 0 21px;
+    padding: 15px 0;
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px
+}
+
+.client-order-total strong {
+    color: var(--text);
+    font-size: 16px
+}
+
+.client-order-form {
+    padding: 0 21px 21px
+}
+
+.client-order-form .field {
+    margin-top: 12px
+}
+
+.client-order-form .primary-button {
+    width: 100%
+}
+
+.client-order-foot {
+    margin: 16px 0;
+    color: var(--muted);
+    font-size: 11px
 }
 
 .sidebar {
@@ -802,6 +1102,63 @@ tbody tr:hover {
     gap: 15px
 }
 
+.order-lines-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin: 20px 0 12px;
+    color: #596578;
+    font-size: 12px
+}
+
+.order-lines {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 16px
+}
+
+.order-line {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 120px 32px;
+    align-items: end;
+    gap: 10px
+}
+
+.order-line-remove {
+    margin-bottom: 1px
+}
+
+.order-line-remove:disabled {
+    opacity: .45;
+    cursor: not-allowed
+}
+
+.order-lines-empty {
+    margin: 0;
+    padding: 15px;
+    border: 1px dashed var(--line);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 11px;
+    text-align: center
+}
+
+.order-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px
+}
+
+.order-total strong {
+    color: var(--text);
+    font-size: 17px
+}
+
 .field {
     display: flex;
     flex-direction: column;
@@ -809,6 +1166,16 @@ tbody tr:hover {
     font-size: 11px;
     font-weight: 700;
     color: #596578
+}
+
+.field-label {
+    display: inline
+}
+
+.required-mark {
+    display: inline;
+    color: var(--red);
+    font-weight: 700
 }
 
 .field input,
@@ -943,6 +1310,10 @@ body.dark .small-action {
     color: #c4cfdd
 }
 
+body.dark .order-lines-heading {
+    color: #a6b2c2
+}
+
 body.dark .search-box input {
     color: #e1e8f0
 }
@@ -980,6 +1351,10 @@ body.dark .table-footer {
 }
 
 @media(max-width:1050px) {
+    .client-order-layout {
+        grid-template-columns: minmax(0, 1fr) 320px
+    }
+
     .sidebar {
         width: 210px
     }
@@ -1012,6 +1387,40 @@ body.dark .table-footer {
 }
 
 @media(max-width:720px) {
+    .client-order-header {
+        padding: 10px 15px
+    }
+
+    .customer-account {
+        gap: 7px;
+        font-size: 10px
+    }
+
+    .client-order-main {
+        width: calc(100% - 30px);
+        margin: 25px auto
+    }
+
+    .client-order-layout {
+        grid-template-columns: 1fr
+    }
+
+    .client-checkout-panel {
+        order: -1
+    }
+
+    .client-product-card {
+        padding: 15px;
+        align-items: flex-start;
+        flex-direction: column
+    }
+
+    .client-product-actions {
+        width: 100%;
+        grid-template-columns: 1fr 1fr;
+        align-items: end
+    }
+
     .sidebar {
         transform: translateX(-100%);
         transition: transform .2s;

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Place a materials order</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body class="client-order-page">
+  <header class="client-order-header">
+    <a class="brand" href="/" aria-label="Materials order home">
+      <img class="brand-mark brand-logo" src="/logo.png" alt="">
+      <span><strong>Materials</strong><small>ORDERING</small></span>
+    </a>
+    <div class="customer-account">
+      <span id="customerWelcome"></span>
+      <button class="secondary-button" id="customerLogout" type="button">Sign out</button>
+    </div>
+  </header>
+  <main class="client-order-main">
+    <div class="client-order-intro">
+      <p class="eyebrow">CUSTOMER ORDER</p>
+      <h1>Place your order</h1>
+      <p class="subheading">Choose available materials and send your order request.</p>
+    </div>
+    <p class="client-order-status" id="clientOrderStatus" role="status" aria-live="polite"></p>
+    <div class="client-order-layout">
+      <section class="panel client-catalog-panel" aria-labelledby="catalogTitle">
+        <div class="panel-header">
+          <div>
+            <h2 id="catalogTitle">Available materials</h2>
+            <p>Prices are shown in Philippine pesos (₱).</p>
+          </div>
+        </div>
+        <div class="toolbar">
+          <label class="search-box"><span>⌕</span><input id="catalogSearch" type="search"
+              placeholder="Search materials..." aria-label="Search available materials"></label>
+        </div>
+        <div id="clientCatalog" class="client-catalog">
+          <p class="empty-cell">Loading available materials…</p>
+        </div>
+      </section>
+      <section class="panel client-checkout-panel" aria-labelledby="cartTitle">
+        <div class="panel-header">
+          <div>
+            <h2 id="cartTitle">Your order</h2>
+            <p>Your order will use the contact details saved on your account.</p>
+          </div>
+        </div>
+        <div id="clientCart" class="client-cart">
+          <p class="order-lines-empty">Your order is empty.</p>
+        </div>
+        <div class="client-order-total"><span>Estimated total</span><strong id="clientOrderTotal">₱0.00</strong></div>
+        <form id="clientOrderForm" class="client-order-form">
+          <label class="field">Your name<input id="clientName" maxlength="120" autocomplete="name" readonly></label>
+          <label class="field">Email address<input id="clientEmail" type="email" maxlength="254"
+              autocomplete="email" readonly></label>
+          <label class="field">Phone number<input id="clientPhone" type="tel" maxlength="11"
+              autocomplete="tel" readonly></label>
+          <label class="field">Order note<textarea id="clientNote" rows="3" maxlength="500"
+              placeholder="Optional delivery or order details"></textarea></label>
+          <p class="form-error" id="clientOrderError" role="alert"></p>
+          <button class="primary-button" id="submitClientOrder" type="submit">Submit order</button>
+        </form>
+      </section>
+    </div>
+    <p class="client-order-foot">Your order will be saved and inventory availability updated when it is submitted.</p>
+  </main>
+  <script src="/order.js"></script>
+</body>
+
+</html>
