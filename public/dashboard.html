@@ -51,6 +51,7 @@
               <span class="profile-chevron" aria-hidden="true">▾</span>
             </button>
             <div class="profile-dropdown hidden" id="profileDropdown">
+              <button class="profile-menu-item" id="editProfileBtn" type="button">Edit profile</button>
               <button class="profile-menu-item" id="changePasswordBtn" type="button">Change password</button>
               <button class="profile-menu-item" id="logoutBtn" type="button">Log out</button>
             </div>
@@ -181,7 +182,7 @@
           <div class="panel-header">
             <div>
               <h2>Application accounts</h2>
-              <p>Staff can manage user and customer accounts. Only administrators can manage administrator accounts or grant administrator access.</p>
+              <p>Staff can manage staff and customer accounts. Only administrators can manage administrator accounts or grant administrator access.</p>
             </div>
             <div class="toolbar">
               <select id="userSort" aria-label="Sort accounts">
@@ -302,14 +303,14 @@
         </div><button class="icon-button close-modal" data-close="orderModal" aria-label="Close">×</button>
       </div>
       <form id="orderForm">
-        <label class="field">Select customer <span class="required-mark">*</span><select id="orderClientSelect" required>
+        <label class="field"><span class="field-label">Select customer <span class="required-mark">*</span></span><select id="orderClientSelect" required>
             <option value="new">New client</option>
           </select></label>
-        <label class="field">Client name <span class="required-mark">*</span><input id="orderClientName" maxlength="120"
+        <label class="field"><span class="field-label">Client name <span class="required-mark">*</span></span><input id="orderClientName" maxlength="120"
             autocomplete="name" required placeholder="Enter the client's name"></label>
-        <label class="field">Email address <span class="required-mark">*</span><input id="orderClientEmail" type="email"
+        <label class="field"><span class="field-label">Email address <span class="required-mark">*</span></span><input id="orderClientEmail" type="email"
             maxlength="254" autocomplete="email" required placeholder="you@example.com"></label>
-        <label class="field">Phone number <span class="required-mark">*</span><input id="orderClientPhone" type="text"
+        <label class="field"><span class="field-label">Phone number <span class="required-mark">*</span></span><input id="orderClientPhone" type="text"
             maxlength="32" autocomplete="tel" inputmode="numeric" pattern="[0-9]{11}" required
             placeholder="09123456789"></label>
         <div class="order-lines-heading">
@@ -341,6 +342,33 @@
           id="confirmDeleteBtn">Delete item</button></div>
     </section>
   </div>
+  <div class="modal-backdrop hidden" id="profileModal">
+    <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">YOUR ACCOUNT</p>
+          <h2 id="profileModalTitle">Edit profile</h2>
+        </div><button class="icon-button close-modal" data-close="profileModal" aria-label="Close">×</button>
+      </div>
+      <form id="profileForm">
+        <label class="field"><span class="field-label">Username <span class="required-mark">*</span></span><input
+            id="profileUsername" minlength="3" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,31}"
+            autocomplete="username" required></label>
+        <label class="field"><span class="field-label">Email address <span class="required-mark">*</span></span><input
+            id="profileEmail" type="email" maxlength="254" autocomplete="email" required></label>
+        <label class="field"><span class="field-label">Phone number <span class="required-mark">*</span></span><input
+            id="profilePhoneNumber" type="text" maxlength="11" autocomplete="tel" inputmode="numeric"
+            pattern="[0-9]{11}" required><small>Enter exactly 11 digits.</small></label>
+        <label class="field"><span class="field-label">Display name <span class="required-mark">*</span></span><input
+            id="profileDisplayName" maxlength="120" autocomplete="name" required></label>
+        <p class="form-error" id="profileError" role="alert"></p>
+        <div class="modal-actions">
+          <button type="button" class="secondary-button" data-close="profileModal">Cancel</button>
+          <button type="submit" class="primary-button" id="saveProfileBtn">Save changes</button>
+        </div>
+      </form>
+    </section>
+  </div>
   <div class="modal-backdrop hidden" id="accountModal">
     <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="accountModalTitle">
       <div class="modal-heading">
@@ -363,7 +391,8 @@
         <label class="field">Password <input id="accountPassword" type="password" minlength="8"
             autocomplete="new-password"><small id="accountPasswordHint">At least 8 characters.</small></label>
         <label class="field"><span class="field-label">Role <span class="required-mark">*</span></span><select id="accountRole" required>
-            <option value="user">User</option><option value="admin">Administrator</option><option value="customer">Customer</option>
+            <option value="" disabled>Choose role</option>
+            <option value="staff">Staff</option><option value="admin">Administrator</option><option value="customer">Customer</option>
           </select></label>
         <p class="form-error" id="accountError" role="alert"></p>
         <div class="modal-actions"><button type="button" class="secondary-button"

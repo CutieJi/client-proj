@@ -59,7 +59,7 @@ create table if not exists public.accounts (
   phone_number text not null default '',
   password_hash text,
   display_name text not null default '',
-  role text not null check (role in ('admin','user','customer')),
+  role text not null check (role in ('admin','staff','customer')),
   created_at timestamptz not null default now()
 );
 
@@ -70,7 +70,8 @@ alter table public.accounts add column if not exists display_name text not null 
 alter table public.accounts add column if not exists password_hash text;
 alter table public.accounts drop constraint if exists accounts_role_check;
 alter table public.accounts drop constraint if exists app_users_role_check;
-alter table public.accounts add constraint accounts_role_check check (role in ('admin','user','customer'));
+update public.accounts set role = 'staff' where role = 'user';
+alter table public.accounts add constraint accounts_role_check check (role in ('admin','staff','customer'));
 do $$
 begin
   if exists (
@@ -420,7 +421,7 @@ begin
   from public.accounts as users
   where users.user_id = p_actor_id
   for share;
-  if actor_role is null or actor_role not in ('admin', 'user') then
+  if actor_role is null or actor_role not in ('admin', 'staff') then
     raise exception 'A staff account is required to manage accounts.';
   end if;
   if normalized_username is null or normalized_username !~ '^[a-z0-9][a-z0-9._-]{2,31}$' then
@@ -435,7 +436,7 @@ begin
   if normalized_phone_number is null or normalized_phone_number !~ '^[0-9]{11}$' then
     raise exception 'Phone number must contain exactly 11 digits.';
   end if;
-  if p_role is null or p_role not in ('admin', 'user', 'customer') then
+  if p_role is null or p_role not in ('admin', 'staff', 'customer') then
     raise exception 'Choose a valid account role.';
   end if;
 
@@ -523,7 +524,7 @@ begin
   from public.accounts as users
   where users.user_id = p_actor_id
   for share;
-  if actor_role is null or actor_role not in ('admin', 'user') then
+  if actor_role is null or actor_role not in ('admin', 'staff') then
     raise exception 'A staff account is required to manage accounts.';
   end if;
   if p_actor_id = p_user_id then

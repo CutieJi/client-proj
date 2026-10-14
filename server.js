@@ -32,6 +32,10 @@ function fail(res, error) {
 function normalizeUsername(value) {
   return String(value || "").trim().toLowerCase();
 }
+function normalizeRole(role) {
+  const normalizedRole = String(role || "").trim().toLowerCase();
+  return normalizedRole === "user" ? "staff" : normalizedRole;
+}
 function validUsername(username) {
   return /^[a-z0-9][a-z0-9._-]{2,31}$/.test(username);
 }
@@ -113,12 +117,12 @@ async function requireAuth(req, res, next) {
     email: user.email,
     phone_number: user.phone_number,
     display_name: user.display_name,
-    role: user.role
+    role: normalizeRole(user.role)
   };
   next();
 }
 function staffRequired(req, res, next) {
-  if (["admin", "user"].includes(req.user?.role)) return next();
+  if (["admin", "staff"].includes(req.user?.role)) return next();
   if (req.path === "/dashboard.html") return res.redirect("/customer.html");
   return res.status(403).json({ error: "A staff account is required." });
 }
@@ -250,6 +254,42 @@ app.use(["/api/items", "/api/summary", "/api/transactions", "/api/orders", "/api
 
 app.get("/api/auth/me", (req, res) => res.json({ user: req.user }));
 
+app.patch("/api/auth/profile", async (req, res) => {
+  const username = normalizeUsername(req.body?.username);
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const phoneNumber = typeof req.body?.phone_number === "string" ? req.body.phone_number.trim() : "";
+  const displayName = typeof req.body?.display_name === "string" ? req.body.display_name.trim() : "";
+  if (!validUsername(username)) {
+    return res.status(400).json({ error: "Username must be 3-32 characters: letters, numbers, periods, underscores, or hyphens." });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    return res.status(400).json({ error: "Enter a valid email address (254 characters or fewer)." });
+  }
+  if (!/^[0-9]{11}$/.test(phoneNumber)) {
+    return res.status(400).json({ error: "Phone number must contain exactly 11 digits." });
+  }
+  if (!displayName || displayName.length > 120) {
+    return res.status(400).json({ error: "Display name is required and must be 120 characters or fewer." });
+  }
+
+  const { data: matchingEmail, error: emailError } = await supabase.from("accounts")
+    .select("user_id").eq("email", email).neq("user_id", req.user.user_id).limit(1).maybeSingle();
+  if (emailError) return fail(res, emailError);
+  if (matchingEmail) return res.status(409).json({ error: "That email address is already in use." });
+
+  const { data, error } = await supabase.from("accounts")
+    .update({ username, email, phone_number: phoneNumber, display_name: displayName })
+    .eq("user_id", req.user.user_id)
+    .in("role", req.user.role === "staff" ? ["staff", "user"] : [req.user.role])
+    .select("user_id,username,email,phone_number,display_name,role").maybeSingle();
+  if (error) {
+    if (error.code === "23505") return res.status(409).json({ error: "That username is already in use." });
+    return fail(res, error);
+  }
+  if (!data) return res.status(404).json({ error: "Account not found." });
+  res.json({ user: { ...data, role: normalizeRole(data.role) } });
+});
+
 app.post("/api/auth/change-password", async (req, res) => {
   const currentPassword = String(req.body?.current_password || "");
   const newPassword = String(req.body?.new_password || "");
@@ -275,7 +315,7 @@ app.get("/api/users", staffRequired, async (req, res) => {
   if (req.user.role !== "admin") query = query.neq("role", "admin");
   const { data, error } = await query.order("created_at");
   if (error) return fail(res, error);
-  res.json(data);
+  res.json(data.map(account => ({ ...account, role: normalizeRole(account.role) })));
 });
 
 app.get("/api/order-clients", async (req, res) => {
@@ -293,7 +333,7 @@ async function saveAccount(req, res, userId = null) {
   const phoneNumber = typeof req.body?.phone_number === "string" ? req.body.phone_number.trim() : "";
   const displayName = String(req.body?.display_name || "").trim();
   const password = String(req.body?.password || "");
-  const role = req.body?.role;
+  const role = normalizeRole(req.body?.role) || (userId === null ? "staff" : "");
   if (!validUsername(username)) {
     return res.status(400).json({ error: "Username must be 3-32 characters: letters, numbers, periods, underscores, or hyphens." });
   }
@@ -306,14 +346,14 @@ async function saveAccount(req, res, userId = null) {
   if (!/^[0-9]{11}$/.test(phoneNumber)) {
     return res.status(400).json({ error: "Phone number must contain exactly 11 digits." });
   }
-  if (!["admin", "user", "customer"].includes(role)) {
-    return res.status(400).json({ error: "Choose a valid account role." });
+  if (!["admin", "staff", "customer"].includes(role)) {
+    return res.status(400).json({ error: "Choose Staff, Administrator, or Customer for this account." });
   }
   if ((userId === null || password) && password.length < 8) {
     return res.status(400).json({ error: "Password must be at least 8 characters." });
   }
 
-  const { data, error } = await supabase.rpc("save_app_user", {
+  const saveArguments = {
     p_username: username,
     p_email: email,
     p_phone_number: phoneNumber,
@@ -322,7 +362,12 @@ async function saveAccount(req, res, userId = null) {
     p_role: role,
     p_actor_id: req.user.user_id,
     p_user_id: userId
-  });
+  };
+  let { data, error } = await supabase.rpc("save_app_user", saveArguments);
+  if (error?.message === "Choose a valid account role." && role === "staff") {
+    console.warn("Database role function is outdated; saving staff with its legacy role. Apply supabase/schema.sql to migrate.");
+    ({ data, error } = await supabase.rpc("save_app_user", { ...saveArguments, p_role: "user" }));
+  }
   if (error) {
     if (error.code === "23505") return res.status(409).json({ error: "That username is already in use." });
     if (error.code === "P0001" && error.message.startsWith("That email address")) {
@@ -336,7 +381,7 @@ async function saveAccount(req, res, userId = null) {
   }
   const user = data?.[0];
   if (!user) return res.status(404).json({ error: "Account not found." });
-  res.status(userId ? 200 : 201).json(user);
+  res.status(userId ? 200 : 201).json({ ...user, role: normalizeRole(user.role) });
 }
 
 app.post("/api/users", staffRequired, (req, res) => saveAccount(req, res));

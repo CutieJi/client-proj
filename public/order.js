@@ -135,6 +135,11 @@ function setAccountContact(user) {
   $("clientPhone").value = user.phone_number || "";
 }
 
+function closeCustomerProfileMenu() {
+  $("customerProfileDropdown").classList.add("hidden");
+  $("customerProfileTrigger").setAttribute("aria-expanded", "false");
+}
+
 async function initializeCustomerPage() {
   try {
     const { user } = await api("/api/auth/me");
@@ -142,6 +147,9 @@ async function initializeCustomerPage() {
     state.user = user;
     setAccountContact(user);
     $("customerWelcome").textContent = `Signed in as ${user.display_name}`;
+    const initials = user.display_name.trim().split(/\s+/).filter(Boolean).slice(0, 2)
+      .map(part => part[0]).join("");
+    $("customerProfileAvatar").textContent = initials.toUpperCase() || user.username.slice(0, 2).toUpperCase();
     const contactReady = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email || "")
       && /^[0-9]{11}$/.test(user.phone_number || "");
     $("submitClientOrder").disabled = !contactReady;
@@ -156,8 +164,91 @@ async function initializeCustomerPage() {
   }
 }
 
-$("customerLogout").addEventListener("click", async () => {
-  const button = $("customerLogout");
+$("customerProfileTrigger").addEventListener("click", () => {
+  const isOpen = !$("customerProfileDropdown").classList.contains("hidden");
+  $("customerProfileDropdown").classList.toggle("hidden", isOpen);
+  $("customerProfileTrigger").setAttribute("aria-expanded", String(!isOpen));
+});
+$("customerEditProfileBtn").addEventListener("click", () => {
+  closeCustomerProfileMenu();
+  $("customerProfileForm").reset();
+  $("customerUsername").value = state.user.username;
+  $("customerProfileEmail").value = state.user.email;
+  $("customerProfilePhone").value = state.user.phone_number;
+  $("customerDisplayName").value = state.user.display_name;
+  $("customerProfileError").textContent = "";
+  $("customerProfileModal").classList.remove("hidden");
+});
+$("customerProfilePhone").addEventListener("input", event => {
+  event.target.value = event.target.value.replace(/\D/g, "").slice(0, 11);
+});
+$("customerProfileForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  $("customerProfileError").textContent = "";
+  const button = $("saveCustomerProfileBtn");
+  button.disabled = true;
+  try {
+    const result = await api("/api/auth/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        username: $("customerUsername").value,
+        email: $("customerProfileEmail").value,
+        phone_number: $("customerProfilePhone").value,
+        display_name: $("customerDisplayName").value
+      })
+    });
+    state.user = result.user;
+    $("customerWelcome").textContent = `Signed in as ${result.user.display_name}`;
+    const initials = result.user.display_name.trim().split(/\s+/).filter(Boolean).slice(0, 2)
+      .map(part => part[0]).join("");
+    $("customerProfileAvatar").textContent = initials.toUpperCase() || result.user.username.slice(0, 2).toUpperCase();
+    setAccountContact(result.user);
+    $("customerProfileModal").classList.add("hidden");
+    $("clientOrderStatus").textContent = "Your profile has been updated.";
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("customerProfileError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+$("customerChangePasswordBtn").addEventListener("click", () => {
+  closeCustomerProfileMenu();
+  $("customerPasswordForm").reset();
+  $("customerPasswordError").textContent = "";
+  $("customerPasswordModal").classList.remove("hidden");
+});
+$("customerPasswordForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  $("customerPasswordError").textContent = "";
+  if ($("customerNewPassword").value !== $("customerConfirmPassword").value) {
+    $("customerPasswordError").textContent = "New passwords do not match.";
+    return;
+  }
+  const button = $("saveCustomerPasswordBtn");
+  button.disabled = true;
+  try {
+    await api("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({
+        current_password: $("customerCurrentPassword").value,
+        new_password: $("customerNewPassword").value
+      })
+    });
+    window.location.replace("/?password_changed=1");
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("customerPasswordError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+$("customerLogout").addEventListener("click", () => {
+  closeCustomerProfileMenu();
+  $("customerLogoutModal").classList.remove("hidden");
+});
+$("confirmCustomerLogoutBtn").addEventListener("click", async () => {
+  const button = $("confirmCustomerLogoutBtn");
   button.disabled = true;
   try {
     await api("/api/auth/logout", { method: "POST" });
@@ -165,6 +256,24 @@ $("customerLogout").addEventListener("click", async () => {
   } catch (error) {
     $("clientOrderError").textContent = error.message;
     button.disabled = false;
+  }
+});
+
+document.querySelectorAll("[data-close]").forEach(button => {
+  button.addEventListener("click", () => $(button.dataset.close).classList.add("hidden"));
+});
+document.querySelectorAll(".modal-backdrop").forEach(modal => {
+  modal.addEventListener("click", event => {
+    if (event.target === modal && modal.id !== "customerLogoutModal") modal.classList.add("hidden");
+  });
+});
+document.addEventListener("click", event => {
+  if (!event.target.closest("#customerProfileMenu")) closeCustomerProfileMenu();
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    closeCustomerProfileMenu();
+    document.querySelectorAll(".modal-backdrop").forEach(modal => modal.classList.add("hidden"));
   }
 });
 

@@ -184,7 +184,7 @@ function renderUsers() {
   $("usersBody").innerHTML = rows.length ? rows.map(user => `<tr>
     <td>${esc(user.username)}</td><td>${esc(user.email || "—")}</td><td>${esc(user.phone_number || "—")}</td>
     <td>${esc(user.display_name)}</td>
-    <td><span class="category-pill">${({ admin: "Administrator", user: "User", customer: "Customer" })[user.role] || esc(user.role)}</span></td>
+    <td><span class="category-pill">${({ admin: "Administrator", staff: "Staff", customer: "Customer" })[user.role] || esc(user.role)}</span></td>
     <td>${esc(dateOnly(user.created_at))}</td><td class="user-actions">
       <button class="small-action" data-user-action="edit" data-id="${esc(user.user_id)}">Edit</button>
       ${user.user_id === state.user.user_id ? "" : `<button class="small-action" data-user-action="delete" data-id="${esc(user.user_id)}">Delete</button>`}
@@ -232,7 +232,7 @@ function openAccountModal(user = null) {
   $("accountEmail").value = user?.email || "";
   $("accountPhoneNumber").value = user?.phone_number || "";
   $("accountDisplayName").value = user?.display_name || "";
-  $("accountRole").value = user?.role || "user";
+  $("accountRole").value = user ? user.role : "";
   $("accountRole").disabled = user?.user_id === state.user.user_id;
   $("accountPassword").value = "";
   $("accountPassword").required = !user;
@@ -259,13 +259,13 @@ function showApp(user) {
   $("headerDisplayName").textContent = user.display_name;
   const initials = user.display_name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("");
   $("profileAvatar").textContent = initials.toUpperCase() || user.username.slice(0, 2).toUpperCase();
-  $("usersNavLink").classList.toggle("hidden", !["admin", "user"].includes(user.role));
+  $("usersNavLink").classList.toggle("hidden", !["admin", "staff"].includes(user.role));
   $("accountRole").querySelector('option[value="admin"]').disabled = user.role !== "admin";
   setView("inventory");
   loadAll();
 }
 function setView(view) {
-  if (view === "users" && !["admin", "user"].includes(state.user?.role)) view = "inventory";
+  if (view === "users" && !["admin", "staff"].includes(state.user?.role)) view = "inventory";
   state.view = view;
   document.querySelectorAll(".nav-link").forEach(b => b.classList.toggle("active", b.dataset.view === view));
   const viewName = { inventory: "Inventory", transactions: "Stock movements", orders: "Client orders", users: "User management" }[view];
@@ -286,6 +286,48 @@ $("profileTrigger").addEventListener("click", () => {
   const isOpen = !$("profileDropdown").classList.contains("hidden");
   $("profileDropdown").classList.toggle("hidden", isOpen);
   $("profileTrigger").setAttribute("aria-expanded", String(!isOpen));
+});
+$("editProfileBtn").addEventListener("click", () => {
+  closeProfileMenu();
+  $("profileForm").reset();
+  $("profileUsername").value = state.user.username;
+  $("profileEmail").value = state.user.email;
+  $("profilePhoneNumber").value = state.user.phone_number;
+  $("profileDisplayName").value = state.user.display_name;
+  $("profileError").textContent = "";
+  openModal("profileModal");
+});
+$("profilePhoneNumber").addEventListener("input", event => {
+  event.target.value = event.target.value.replace(/\D/g, "").slice(0, 11);
+});
+$("profileForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  $("profileError").textContent = "";
+  const button = $("saveProfileBtn");
+  button.disabled = true;
+  try {
+    const result = await api("/api/auth/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        username: $("profileUsername").value,
+        email: $("profileEmail").value,
+        phone_number: $("profilePhoneNumber").value,
+        display_name: $("profileDisplayName").value
+      })
+    });
+    state.user = result.user;
+    $("headerDisplayName").textContent = result.user.display_name;
+    const initials = result.user.display_name.trim().split(/\s+/).filter(Boolean).slice(0, 2)
+      .map(part => part[0]).join("");
+    $("profileAvatar").textContent = initials.toUpperCase() || result.user.username.slice(0, 2).toUpperCase();
+    closeModal("profileModal");
+    toast("Profile updated.");
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/login.html");
+    $("profileError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 });
 $("logoutBtn").addEventListener("click", () => {
   closeProfileMenu();
@@ -481,6 +523,7 @@ $("orderForm").addEventListener("submit", async event => {
     $("orderError").textContent = "Choose a material and enter a quantity greater than zero for every order line.";
     return;
   }
+  if (!window.confirm("Are you sure you want to place this order?")) return;
   const button = $("saveOrderBtn");
   button.disabled = true;
   try {

@@ -15,8 +15,19 @@
       <span><strong>Materials</strong><small>ORDERING</small></span>
     </a>
     <div class="customer-account">
-      <span id="customerWelcome"></span>
-      <button class="secondary-button" id="customerLogout" type="button">Sign out</button>
+      <div class="profile-menu" id="customerProfileMenu">
+        <button class="profile-trigger" id="customerProfileTrigger" type="button" aria-haspopup="true"
+          aria-expanded="false" aria-controls="customerProfileDropdown">
+          <span class="account-display-name" id="customerWelcome"></span>
+          <span class="avatar" id="customerProfileAvatar">CU</span>
+          <span class="profile-chevron" aria-hidden="true">▾</span>
+        </button>
+        <div class="profile-dropdown hidden" id="customerProfileDropdown">
+          <button class="profile-menu-item" id="customerEditProfileBtn" type="button">Edit profile</button>
+          <button class="profile-menu-item" id="customerChangePasswordBtn" type="button">Change password</button>
+          <button class="profile-menu-item" id="customerLogout" type="button">Log out</button>
+        </div>
+      </div>
     </div>
   </header>
   <main class="client-order-main">
@@ -68,6 +79,74 @@
     </div>
     <p class="client-order-foot">Your order will be saved and inventory availability updated when it is submitted.</p>
   </main>
+  <div class="modal-backdrop hidden" id="customerProfileModal">
+    <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="customerProfileTitle">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">YOUR ACCOUNT</p>
+          <h2 id="customerProfileTitle">Edit profile</h2>
+        </div>
+        <button class="icon-button close-modal" data-close="customerProfileModal" aria-label="Close">×</button>
+      </div>
+      <form id="customerProfileForm">
+        <label class="field"><span class="field-label">Username <span class="required-mark">*</span></span><input
+            id="customerUsername" minlength="3" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,31}"
+            autocomplete="username" required></label>
+        <label class="field"><span class="field-label">Email address <span class="required-mark">*</span></span><input
+            id="customerProfileEmail" type="email" maxlength="254" autocomplete="email" required></label>
+        <label class="field"><span class="field-label">Phone number <span class="required-mark">*</span></span><input
+            id="customerProfilePhone" type="text" maxlength="11" autocomplete="tel" inputmode="numeric"
+            pattern="[0-9]{11}" required><small>Enter exactly 11 digits.</small></label>
+        <label class="field"><span class="field-label">Display name <span class="required-mark">*</span></span><input
+            id="customerDisplayName" maxlength="120" autocomplete="name" required></label>
+        <p class="form-error" id="customerProfileError" role="alert"></p>
+        <div class="modal-actions">
+          <button type="button" class="secondary-button" data-close="customerProfileModal">Cancel</button>
+          <button type="submit" class="primary-button" id="saveCustomerProfileBtn">Save changes</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  <div class="modal-backdrop hidden" id="customerPasswordModal">
+    <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="customerPasswordTitle">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">ACCOUNT SECURITY</p>
+          <h2 id="customerPasswordTitle">Change password</h2>
+        </div>
+        <button class="icon-button close-modal" data-close="customerPasswordModal" aria-label="Close">×</button>
+      </div>
+      <form id="customerPasswordForm">
+        <label class="field"><span class="field-label">Current password <span class="required-mark">*</span></span><input
+            id="customerCurrentPassword" type="password" autocomplete="current-password" required></label>
+        <label class="field"><span class="field-label">New password <span class="required-mark">*</span></span><input
+            id="customerNewPassword" type="password" minlength="8" autocomplete="new-password" required>
+          <small>At least 8 characters.</small></label>
+        <label class="field"><span class="field-label">Confirm new password <span class="required-mark">*</span></span><input
+            id="customerConfirmPassword" type="password" minlength="8" autocomplete="new-password" required></label>
+        <p class="form-error" id="customerPasswordError" role="alert"></p>
+        <div class="modal-actions">
+          <button type="button" class="secondary-button" data-close="customerPasswordModal">Cancel</button>
+          <button type="submit" class="primary-button" id="saveCustomerPasswordBtn">Change password</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  <div class="modal-backdrop hidden" id="customerLogoutModal">
+    <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="customerLogoutTitle">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">SIGN OUT</p>
+          <h2 id="customerLogoutTitle">Are you sure?</h2>
+        </div>
+      </div>
+      <p class="delete-message">Do you want to sign out of your account?</p>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" data-close="customerLogoutModal">Cancel</button>
+        <button type="button" class="danger-button" id="confirmCustomerLogoutBtn">Sign out</button>
+      </div>
+    </section>
+  </div>
   <script src="/order.js"></script>
 </body>
 
