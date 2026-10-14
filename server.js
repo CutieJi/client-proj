@@ -126,6 +126,10 @@ function staffRequired(req, res, next) {
   if (req.path === "/dashboard.html") return res.redirect("/customer.html");
   return res.status(403).json({ error: "A staff account is required." });
 }
+function adminRequired(req, res, next) {
+  if (req.user?.role === "admin") return next();
+  return res.status(403).json({ error: "An administrator account is required." });
+}
 function customerRequired(req, res, next) {
   if (req.user?.role !== "customer") {
     if (req.path === "/customer.html") return res.redirect("/dashboard.html");
@@ -309,13 +313,39 @@ app.post("/api/auth/change-password", async (req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/users", staffRequired, async (req, res) => {
-  let query = supabase.from("accounts")
-    .select("user_id,username,email,phone_number,display_name,role,created_at");
-  if (req.user.role !== "admin") query = query.neq("role", "admin");
-  const { data, error } = await query.order("created_at");
+app.get("/api/users", adminRequired, async (req, res) => {
+  const { data, error } = await supabase.from("accounts")
+    .select("user_id,username,email,phone_number,display_name,role,created_at")
+    .order("created_at");
   if (error) return fail(res, error);
   res.json(data.map(account => ({ ...account, role: normalizeRole(account.role) })));
+});
+
+app.post("/api/users", adminRequired, (req, res) => saveAccount(req, res));
+
+app.patch("/api/users/:id", adminRequired, (req, res) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+    return res.status(400).json({ error: "Invalid account ID." });
+  }
+  return saveAccount(req, res, req.params.id);
+});
+
+app.delete("/api/users/:id", adminRequired, async (req, res) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+    return res.status(400).json({ error: "Invalid account ID." });
+  }
+  const { error } = await supabase.rpc("delete_app_user", {
+    p_actor_id: req.user.user_id,
+    p_user_id: req.params.id
+  });
+  if (error) {
+    if (error.code === "P0001" && error.message.startsWith("Only administrators")) {
+      return res.status(403).json({ error: error.message });
+    }
+    if (error.code === "P0001") return res.status(400).json({ error: error.message });
+    return fail(res, error);
+  }
+  res.json({ ok: true });
 });
 
 app.get("/api/order-clients", async (req, res) => {
@@ -364,9 +394,17 @@ async function saveAccount(req, res, userId = null) {
     p_user_id: userId
   };
   let { data, error } = await supabase.rpc("save_app_user", saveArguments);
-  if (error?.message === "Choose a valid account role." && role === "staff") {
+  const hasLegacyStaffRoleRules = candidate =>
+    (candidate?.code === "P0001" && /valid account role/i.test(candidate.message || ""))
+    || (candidate?.code === "23514" && candidate.constraint === "accounts_role_check");
+  if (role === "staff" && hasLegacyStaffRoleRules(error)) {
     console.warn("Database role function is outdated; saving staff with its legacy role. Apply supabase/schema.sql to migrate.");
     ({ data, error } = await supabase.rpc("save_app_user", { ...saveArguments, p_role: "user" }));
+    if (hasLegacyStaffRoleRules(error)) {
+      return res.status(503).json({
+        error: "The database still rejects staff accounts. Run the latest supabase/schema.sql in the Supabase SQL Editor, then restart the app."
+      });
+    }
   }
   if (error) {
     if (error.code === "23505") return res.status(409).json({ error: "That username is already in use." });
@@ -383,33 +421,6 @@ async function saveAccount(req, res, userId = null) {
   if (!user) return res.status(404).json({ error: "Account not found." });
   res.status(userId ? 200 : 201).json({ ...user, role: normalizeRole(user.role) });
 }
-
-app.post("/api/users", staffRequired, (req, res) => saveAccount(req, res));
-
-app.patch("/api/users/:id", staffRequired, (req, res) => {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
-    return res.status(400).json({ error: "Invalid account ID." });
-  }
-  return saveAccount(req, res, req.params.id);
-});
-
-app.delete("/api/users/:id", staffRequired, async (req, res) => {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
-    return res.status(400).json({ error: "Invalid account ID." });
-  }
-  const { error } = await supabase.rpc("delete_app_user", {
-    p_actor_id: req.user.user_id,
-    p_user_id: req.params.id
-  });
-  if (error) {
-    if (error.code === "P0001" && error.message.startsWith("Only administrators")) {
-      return res.status(403).json({ error: error.message });
-    }
-    if (error.code === "P0001") return res.status(400).json({ error: error.message });
-    return fail(res, error);
-  }
-  res.json({ ok: true });
-});
 
 app.get("/api/items", async (req, res) => {
   let query = supabase.from("inventory_items").select("*").order("category").order("name");

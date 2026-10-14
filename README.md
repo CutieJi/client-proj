@@ -19,7 +19,7 @@ A modern, minimal inventory app for the handwritten building-material price list
 - Registration requires matching password confirmation; accounts can sign in with email or username
 - Customer order contact details are taken from the signed-in account
 - Username/password login with customer, staff, and administrator roles
-- Staff account management for staff and customer accounts; administrator accounts remain admin-managed
+- Admin-only account management for staff, customer, and administrator accounts
 - Staff and administrator profile editing from the dashboard account menu
 - Account sorting, self-service password changes, and confirmed sign-out
 - Responsive layout and light/dark mode
@@ -51,8 +51,8 @@ A modern, minimal inventory app for the handwritten building-material price list
 5. Create the initial admin in Supabase **SQL Editor** by replacing the example username, email, phone number,
    display name, and password values in `supabase/initial_admin.sql`, then running the script. It stores a bcrypt hash,
    not the plain-text password.
-   After signing in, staff can create, edit, reset passwords, and delete staff/customer accounts from the dashboard's
-   **User management** page. Only admins can manage admin accounts or grant admin access. Passwords must be at least
+   After signing in, admins can create, edit, reset passwords, and delete staff/customer/admin accounts from the dashboard's
+   **User management** page. Passwords must be at least
    8 characters (12 or more is recommended).
 6. If updating an existing deployment, run the latest `supabase/schema.sql` in the Supabase SQL Editor before creating
    staff accounts. This migrates existing `user` roles to `staff` and updates the account-role validation function.
@@ -65,8 +65,8 @@ A modern, minimal inventory app for the handwritten building-material price list
 
 8. Visit `http://localhost:3000` to sign in or create a customer account. Customer accounts can submit orders after
    signing in. Staff can also sign in from this page using the admin username and password created in SQL; staff
-   accounts are managed from the **User management** page; regular staff can manage staff/customer roles while admins
-   manage all roles. The customer ordering page is
+   accounts are managed by admins from the **User management** page. Staff can access inventory and orders but not user
+   management. The customer ordering page is
    `/customer.html` and the staff dashboard is `/dashboard.html`; both require the appropriate signed-in role.
 
 ## Deploying to Vercel
@@ -80,7 +80,7 @@ deployment rewrite is needed.
 
 ## Important security note
 
-The authentication database uses only `public.accounts` for account data; there is no session table. Signed, expiring HTTP-only cookies keep users logged in, and the server checks the account in `accounts` on each request. Password changes invalidate existing cookies; account deletion and role changes take effect immediately. Cookie signatures use a key derived from the server-only Supabase `service_role` key, so no extra session-secret setting is needed; rotating the service key signs out users. The Supabase `service_role` key bypasses Row Level Security and is used by Express on the server only. Never put it in `public/app.js`, browser HTML, a public repository, or a deployed frontend. Keep `.env` private. Accounts store required username, email, phone number, display name, password hash, and role, plus internal ID/creation time. Login, customer registration, and account management use restricted database functions; registration can create customer-role accounts only. Inventory and order-management APIs require a signed-in account, customer ordering APIs require a customer account, staff can manage staff/customer accounts, and only admins can manage admin accounts or grant admin access. Customers, staff, and admins can update their own profile; password changes are available from each account menu. Customer registration and order submission are each limited to 10 requests per IP address per 15 minutes. Deploy behind HTTPS and set `NODE_ENV=production` so cookies are marked Secure. Apply `supabase/schema.sql` to create or migrate the account table and required functions; it converts existing `user` roles to `staff` and removes a legacy `app_sessions` table if one exists. If migrating the older `app_users` table, usernames are generated from existing email local parts and existing email values are retained. Older accounts without email or phone details must be updated by an administrator, and existing accounts without passwords need a password set by an administrator before they can sign in.
+The authentication database uses only `public.accounts` for account data; there is no session table. Signed, expiring HTTP-only cookies keep users logged in, and the server checks the account in `accounts` on each request. Password changes invalidate existing cookies; account deletion and role changes take effect immediately. Cookie signatures use a key derived from the server-only Supabase `service_role` key, so no extra session-secret setting is needed; rotating the service key signs out users. The Supabase `service_role` key bypasses Row Level Security and is used by Express on the server only. Never put it in `public/app.js`, browser HTML, a public repository, or a deployed frontend. Keep `.env` private. Accounts store required username, email, phone number, display name, password hash, and role, plus internal ID/creation time. Login, customer registration, and account management use restricted database functions; registration can create customer-role accounts only. Inventory and order-management APIs require a signed-in account, customer ordering APIs require a customer account, and only admins can manage staff, customer, and admin accounts. Customers, staff, and admins can update their own profile; password changes are available from each account menu. Customer registration and order submission are each limited to 10 requests per IP address per 15 minutes. Deploy behind HTTPS and set `NODE_ENV=production` so cookies are marked Secure. Apply `supabase/schema.sql` to create or migrate the account table and required functions; it converts existing `user` roles to `staff` and removes a legacy `app_sessions` table if one exists. If migrating the older `app_users` table, usernames are generated from existing email local parts and existing email values are retained. Older accounts without email or phone details must be updated by an administrator, and existing accounts without passwords need a password set by an administrator before they can sign in.
 
 ## Notes about the photographed price list
 
@@ -95,10 +95,10 @@ The initial list is a best-effort transcription. Several handwritten brand names
 - `GET /api/auth/me`
 - `PATCH /api/auth/profile` (update the signed-in account's profile without changing its role)
 - `POST /api/auth/change-password`
-- `GET /api/users` (staff; non-admin staff see staff/customer accounts only)
-- `POST /api/users` (staff; only admins can create admin accounts)
-- `PATCH /api/users/:id` (staff; only admins can manage admin accounts or grant admin access)
-- `DELETE /api/users/:id` (staff; only admins can delete admin accounts)
+- `GET /api/users` (admin only)
+- `POST /api/users` (admin only)
+- `PATCH /api/users/:id` (admin only)
+- `DELETE /api/users/:id` (admin only)
 - `GET /api/items?search=cement&category=Cement`
 - `POST /api/items`
 - `PATCH /api/items/:id`

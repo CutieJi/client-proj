@@ -259,13 +259,13 @@ function showApp(user) {
   $("headerDisplayName").textContent = user.display_name;
   const initials = user.display_name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("");
   $("profileAvatar").textContent = initials.toUpperCase() || user.username.slice(0, 2).toUpperCase();
-  $("usersNavLink").classList.toggle("hidden", !["admin", "staff"].includes(user.role));
+  $("usersNavLink").classList.toggle("hidden", user.role !== "admin");
   $("accountRole").querySelector('option[value="admin"]').disabled = user.role !== "admin";
   setView("inventory");
   loadAll();
 }
 function setView(view) {
-  if (view === "users" && !["admin", "staff"].includes(state.user?.role)) view = "inventory";
+  if (view === "users" && state.user?.role !== "admin") view = "inventory";
   state.view = view;
   document.querySelectorAll(".nav-link").forEach(b => b.classList.toggle("active", b.dataset.view === view));
   const viewName = { inventory: "Inventory", transactions: "Stock movements", orders: "Client orders", users: "User management" }[view];

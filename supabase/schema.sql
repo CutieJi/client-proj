@@ -421,8 +421,8 @@ begin
   from public.accounts as users
   where users.user_id = p_actor_id
   for share;
-  if actor_role is null or actor_role not in ('admin', 'staff') then
-    raise exception 'A staff account is required to manage accounts.';
+  if actor_role is distinct from 'admin' then
+    raise exception 'Only administrators can manage accounts.';
   end if;
   if normalized_username is null or normalized_username !~ '^[a-z0-9][a-z0-9._-]{2,31}$' then
     raise exception 'Username must be 3-32 characters: letters, numbers, periods, underscores, or hyphens.';
@@ -450,9 +450,6 @@ begin
   end if;
 
   if p_user_id is null then
-    if p_role = 'admin' and actor_role <> 'admin' then
-      raise exception 'Only administrators can grant administrator access.';
-    end if;
     if length(coalesce(p_password, '')) < 8 then
       raise exception 'Password must be at least 8 characters.';
     end if;
@@ -473,9 +470,6 @@ begin
     for update;
     if existing_role is null then
       raise exception 'Account not found.';
-    end if;
-    if actor_role <> 'admin' and (existing_role = 'admin' or p_role = 'admin') then
-      raise exception 'Only administrators can manage administrator accounts or grant administrator access.';
     end if;
     if p_user_id = p_actor_id and p_role <> existing_role then
       raise exception 'You cannot change your own account role.';
@@ -524,8 +518,8 @@ begin
   from public.accounts as users
   where users.user_id = p_actor_id
   for share;
-  if actor_role is null or actor_role not in ('admin', 'staff') then
-    raise exception 'A staff account is required to manage accounts.';
+  if actor_role is distinct from 'admin' then
+    raise exception 'Only administrators can manage accounts.';
   end if;
   if p_actor_id = p_user_id then
     raise exception 'You cannot delete your own account.';
@@ -538,10 +532,6 @@ begin
   if target_role is null then
     raise exception 'Account not found.';
   end if;
-  if actor_role <> 'admin' and target_role = 'admin' then
-    raise exception 'Only administrators can delete administrator accounts.';
-  end if;
-
   delete from public.accounts where user_id = p_user_id;
 end;
 $$;
