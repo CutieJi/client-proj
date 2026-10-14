@@ -253,6 +253,21 @@ async function loadUsers() {
     $("usersBody").innerHTML = `<tr><td colspan="7" class="empty-cell">${esc(error.message)}</td></tr>`;
   }
 }
+async function loadActivityLogs() {
+  try {
+    const logs = await api("/api/admin/activity-logs");
+    $("activityBody").innerHTML = logs.length ? logs.map(log => `<tr>
+      <td>${esc(dateTime(log.created_at))}</td>
+      <td>${esc(log.actor_name)}</td>
+      <td><span class="category-pill">${esc(({ admin: "Administrator", staff: "Staff", customer: "Customer" })[log.actor_role] || log.actor_role)}</span></td>
+      <td>${esc(log.action.replace(/[._]/g, " "))}</td>
+      <td>${esc(log.summary)}</td>
+    </tr>`).join("") : `<tr><td colspan="5" class="empty-cell">No activity has been recorded yet.</td></tr>`;
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/login.html");
+    $("activityBody").innerHTML = `<tr><td colspan="5" class="empty-cell">${esc(error.message)}</td></tr>`;
+  }
+}
 function showApp(user) {
   state.user = user;
   $("appShell").classList.remove("hidden");
@@ -260,27 +275,30 @@ function showApp(user) {
   const initials = user.display_name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("");
   $("profileAvatar").textContent = initials.toUpperCase() || user.username.slice(0, 2).toUpperCase();
   $("usersNavLink").classList.toggle("hidden", user.role !== "admin");
+  $("activityNavLink").classList.toggle("hidden", user.role !== "admin");
   $("accountRole").querySelector('option[value="admin"]').disabled = user.role !== "admin";
   setView("inventory");
   loadAll();
 }
 function setView(view) {
-  if (view === "users" && state.user?.role !== "admin") view = "inventory";
+  if (["users", "activity"].includes(view) && state.user?.role !== "admin") view = "inventory";
   state.view = view;
   document.querySelectorAll(".nav-link").forEach(b => b.classList.toggle("active", b.dataset.view === view));
-  const viewName = { inventory: "Inventory", transactions: "Stock movements", orders: "Client orders", users: "User management" }[view];
+  const viewName = { inventory: "Inventory", transactions: "Stock movements", orders: "Client orders", users: "User management", activity: "Activity logs" }[view];
   $("crumbCurrent").textContent = viewName;
   $("pageTitle").textContent = viewName;
-  $("pageSubtitle").textContent = view === "inventory" ? "Track materials, stock levels, and current prices." : view === "users" ? "Manage accounts for your inventory workspace." : view === "orders" ? "Record client purchases and review saved order history." : "A clear record of every stock-in, stock-out, and adjustment.";
+  $("pageSubtitle").textContent = view === "inventory" ? "Track materials, stock levels, and current prices." : view === "users" ? "Manage accounts for your inventory workspace." : view === "orders" ? "Record client purchases and review saved order history." : view === "activity" ? "Review successful changes made by customers, staff, and administrators." : "A clear record of every stock-in, stock-out, and adjustment.";
   $("addItemBtn").classList.toggle("hidden", view !== "inventory");
   $("statsGrid").classList.toggle("hidden", view !== "inventory");
   $("inventoryPanel").classList.toggle("hidden", view !== "inventory");
   $("transactionsPanel").classList.toggle("hidden", view !== "transactions");
   $("ordersPanel").classList.toggle("hidden", view !== "orders");
   $("usersPanel").classList.toggle("hidden", view !== "users");
+  $("activityPanel").classList.toggle("hidden", view !== "activity");
   if (view === "transactions") loadTransactions();
   if (view === "orders") loadOrders();
   if (view === "users") loadUsers();
+  if (view === "activity") loadActivityLogs();
 }
 $("profileTrigger").addEventListener("click", () => {
   const isOpen = !$("profileDropdown").classList.contains("hidden");
@@ -548,6 +566,7 @@ $("orderForm").addEventListener("submit", async event => {
   }
 });
 document.querySelectorAll(".nav-link").forEach(b => b.addEventListener("click", () => { setView(b.dataset.view); $("sidebar").classList.remove("open"); }));
+$("refreshActivityBtn").addEventListener("click", loadActivityLogs);
 document.addEventListener("click", event => {
   if (!window.matchMedia("(max-width: 720px)").matches) return;
   const sidebar = $("sidebar");

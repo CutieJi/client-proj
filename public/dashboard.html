@@ -36,6 +36,11 @@
           <path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-7.5 6c.3-.8.9-2.2 2-3.2-.5-.2-1-.3-1.5-.3-3 0-4 2.3-4 3.2 0 .2.1.3.3.3zM4 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
         </svg></span> User management
       </button>
+      <button class="nav-link hidden" data-view="activity" id="activityNavLink">
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
+          <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1m0 1.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11m-.75 1.75v4.06l3.1 1.86.77-1.28-2.37-1.42V4.25z" />
+        </svg></span> Activity logs
+      </button>
     </aside>
     <main class="main">
       <header class="topbar">
@@ -203,6 +208,22 @@
               <tbody id="usersBody"><tr><td colspan="7" class="empty-cell">Loading accounts…</td></tr></tbody>
             </table>
           </div>
+        </section>
+        <section class="panel hidden" id="activityPanel">
+          <div class="panel-header">
+            <div>
+              <h2>Activity logs</h2>
+              <p>Successful account, inventory, stock, and order changes. Passwords and contact details are never shown.</p>
+            </div>
+            <button class="secondary-button" id="refreshActivityBtn" type="button">Refresh logs</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date and time</th><th>Performed by</th><th>Role</th><th>Action</th><th>Details</th></tr></thead>
+              <tbody id="activityBody"><tr><td colspan="5" class="empty-cell">Loading activity logs…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="table-footer"><span>Showing up to 500 most recent changes</span></div>
         </section>
         <p class="page-foot">Materials Inventory <span>•</span> Prices and initial quantities should be verified against
           your supplier list.</p>

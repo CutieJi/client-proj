@@ -130,6 +130,25 @@ function adminRequired(req, res, next) {
   if (req.user?.role === "admin") return next();
   return res.status(403).json({ error: "An administrator account is required." });
 }
+async function recordActivity(req, res, activity, actor = req.user) {
+  const { error } = await supabase.from("admin_activity_logs").insert({
+    actor_id: actor.user_id,
+    actor_name: actor.display_name || actor.username,
+    actor_role: normalizeRole(actor.role),
+    action: activity.action,
+    entity_type: activity.entityType,
+    entity_id: String(activity.entityId || ""),
+    summary: activity.summary
+  });
+  if (error) {
+    console.error("Failed to save admin activity log:", error);
+    res.status(500).json({
+      error: "The change was saved, but its activity log could not be saved. Do not retry this action; contact the administrator."
+    });
+    return false;
+  }
+  return true;
+}
 function customerRequired(req, res, next) {
   if (req.user?.role !== "customer") {
     if (req.path === "/customer.html") return res.redirect("/dashboard.html");
@@ -240,6 +259,13 @@ app.post("/api/auth/register", dbRequired, limitPublicOrderSubmissions, async (r
     .select("password_hash").eq("user_id", user.user_id).maybeSingle();
   if (accountError) return fail(res, accountError);
   if (!account?.password_hash) return fail(res, new Error("Registered customer has no password hash."));
+  const registeredUser = { ...user, role: normalizeRole(user.role) };
+  if (!await recordActivity(req, res, {
+    action: "account.registered",
+    entityType: "account",
+    entityId: user.user_id,
+    summary: `Customer account registered: ${user.username}.`
+  }, registeredUser)) return;
   setSessionCookie(res, createSessionToken(user.user_id, account.password_hash));
   res.status(201).json({ user });
 });
@@ -257,6 +283,14 @@ app.use("/api", (req, res, next) => {
 app.use(["/api/items", "/api/summary", "/api/transactions", "/api/orders", "/api/order-clients"], staffRequired);
 
 app.get("/api/auth/me", (req, res) => res.json({ user: req.user }));
+
+app.get("/api/admin/activity-logs", adminRequired, async (req, res) => {
+  const { data, error } = await supabase.from("admin_activity_logs")
+    .select("id,actor_name,actor_role,action,entity_type,entity_id,summary,created_at")
+    .order("created_at", { ascending: false }).limit(500);
+  if (error) return fail(res, error);
+  res.json(data);
+});
 
 app.patch("/api/auth/profile", async (req, res) => {
   const username = normalizeUsername(req.body?.username);
@@ -291,6 +325,12 @@ app.patch("/api/auth/profile", async (req, res) => {
     return fail(res, error);
   }
   if (!data) return res.status(404).json({ error: "Account not found." });
+  if (!await recordActivity(req, res, {
+    action: "account.profile_updated",
+    entityType: "account",
+    entityId: data.user_id,
+    summary: `${req.user.display_name} updated their account profile.`
+  })) return;
   res.json({ user: { ...data, role: normalizeRole(data.role) } });
 });
 
@@ -310,6 +350,12 @@ app.post("/api/auth/change-password", async (req, res) => {
     return fail(res, error);
   }
   clearSessionCookie(res);
+  if (!await recordActivity(req, res, {
+    action: "account.password_changed",
+    entityType: "account",
+    entityId: req.user.user_id,
+    summary: `${req.user.display_name} changed their password.`
+  })) return;
   res.json({ ok: true });
 });
 
@@ -334,6 +380,10 @@ app.delete("/api/users/:id", adminRequired, async (req, res) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
     return res.status(400).json({ error: "Invalid account ID." });
   }
+  const { data: target, error: targetError } = await supabase.from("accounts")
+    .select("username,role").eq("user_id", req.params.id).maybeSingle();
+  if (targetError) return fail(res, targetError);
+  if (!target) return res.status(404).json({ error: "Account not found." });
   const { error } = await supabase.rpc("delete_app_user", {
     p_actor_id: req.user.user_id,
     p_user_id: req.params.id
@@ -345,6 +395,12 @@ app.delete("/api/users/:id", adminRequired, async (req, res) => {
     if (error.code === "P0001") return res.status(400).json({ error: error.message });
     return fail(res, error);
   }
+  if (!await recordActivity(req, res, {
+    action: "account.deleted",
+    entityType: "account",
+    entityId: req.params.id,
+    summary: `Deleted account ${target.username} (${normalizeRole(target.role)}).`
+  })) return;
   res.json({ ok: true });
 });
 
@@ -419,6 +475,14 @@ async function saveAccount(req, res, userId = null) {
   }
   const user = data?.[0];
   if (!user) return res.status(404).json({ error: "Account not found." });
+  const action = userId ? "account.updated" : "account.created";
+  const passwordReset = userId && password ? " Password was reset." : "";
+  if (!await recordActivity(req, res, {
+    action,
+    entityType: "account",
+    entityId: user.user_id,
+    summary: `${userId ? "Updated" : "Created"} ${normalizeRole(user.role)} account ${user.username}.${passwordReset}`
+  })) return;
   res.status(userId ? 200 : 201).json({ ...user, role: normalizeRole(user.role) });
 }
 
@@ -456,6 +520,12 @@ app.post("/api/items", async (req, res) => {
   }
   const { data, error } = await supabase.from("inventory_items").insert(payload).select().single();
   if (error) return fail(res, error);
+  if (!await recordActivity(req, res, {
+    action: "inventory.item_created",
+    entityType: "inventory_item",
+    entityId: data.id,
+    summary: `Created inventory item ${data.name}.`
+  })) return;
   res.status(201).json(data);
 });
 
@@ -473,12 +543,28 @@ app.patch("/api/items/:id", async (req, res) => {
   payload.updated_at = new Date().toISOString();
   const { data, error } = await supabase.from("inventory_items").update(payload).eq("id", req.params.id).select().single();
   if (error) return fail(res, error);
+  if (!await recordActivity(req, res, {
+    action: "inventory.item_updated",
+    entityType: "inventory_item",
+    entityId: data.id,
+    summary: `Updated inventory item ${data.name}.`
+  })) return;
   res.json(data);
 });
 
 app.delete("/api/items/:id", async (req, res) => {
+  const { data: item, error: readError } = await supabase.from("inventory_items")
+    .select("id,name").eq("id", req.params.id).maybeSingle();
+  if (readError) return fail(res, readError);
+  if (!item) return res.status(404).json({ error: "Inventory item not found." });
   const { error } = await supabase.from("inventory_items").delete().eq("id", req.params.id);
   if (error) return fail(res, error);
+  if (!await recordActivity(req, res, {
+    action: "inventory.item_deleted",
+    entityType: "inventory_item",
+    entityId: item.id,
+    summary: `Deleted inventory item ${item.name}.`
+  })) return;
   res.json({ ok: true });
 });
 
@@ -499,9 +585,21 @@ app.post("/api/transactions", async (req, res) => {
   const { data: transaction, error: txError } = await supabase.from("inventory_transactions")
     .insert({ item_id, type, quantity: amount, note: String(note).trim(), balance_after: nextQuantity }).select().single();
   if (txError) {
+    if (!await recordActivity(req, res, {
+      action: "inventory.stock_changed",
+      entityType: "inventory_item",
+      entityId: item_id,
+      summary: `${type.replace("_", " ")} ${amount} ${item.unit} of ${item.name}; resulting stock ${nextQuantity}. Movement record failed.`
+    })) return;
     // Keep the item update visible; tell the operator the stock changed but its log did not save.
     return res.status(500).json({ error: `Stock changed to ${nextQuantity}, but transaction log failed: ${txError.message}` });
   }
+  if (!await recordActivity(req, res, {
+    action: "inventory.stock_changed",
+    entityType: "inventory_item",
+    entityId: item_id,
+    summary: `${type.replace("_", " ")} ${amount} ${item.unit} of ${item.name}; resulting stock ${nextQuantity}.`
+  })) return;
   res.status(201).json({ item: updated, transaction });
 });
 
@@ -563,6 +661,12 @@ async function saveClientOrder(req, res, userId, isCustomer = false) {
     if (error.code === "P0001") return res.status(400).json({ error: error.message });
     return fail(res, error);
   }
+  if (!await recordActivity(req, res, {
+    action: "order.placed",
+    entityType: "client_order",
+    entityId: orderId,
+    summary: `${isCustomer ? "Customer" : "Staff"} order recorded with ${quantities.size} item type${quantities.size === 1 ? "" : "s"}.`
+  })) return;
   res.status(201).json({ id: orderId });
 }
 
