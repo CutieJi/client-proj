@@ -20,7 +20,8 @@ A modern, minimal inventory app for the handwritten building-material price list
 - Customer order contact details are taken from the signed-in account
 - Username/password login with customer, staff, and administrator roles
 - Admin-only account management for staff, customer, and administrator accounts
-- Admin-only activity logs for successful account, inventory, stock, and order changes
+- Admin-only activity logs for customer, staff, and administrator sign-ins, account changes, inventory changes, stock movements, and orders
+- Customer and staff order receipts with a unique reference number and printable receipt view
 - Staff and administrator profile editing from the dashboard account menu
 - Account sorting, self-service password changes, and confirmed sign-out
 - Responsive layout and light/dark mode
@@ -36,9 +37,9 @@ A modern, minimal inventory app for the handwritten building-material price list
 
 1. In Supabase, open **SQL Editor** and run `supabase/schema.sql`.
    If this is an existing installation, rerun the updated schema to add account contact columns, the customer role,
-   registration function, client-order storage, and admin activity-log storage. Existing account emails are preserved
-   when present; accounts without an email or phone number must be completed by an administrator before their details
-   are current.
+   registration function, client-order storage, receipt references, and admin activity-log storage. Existing account
+   emails are preserved when present; accounts without an email or phone number must be completed by an administrator
+   before their details are current.
 2. Optional: run `supabase/seed.sql` to insert the transcribed price list. The seed starts all quantities at `0` because the photo contains prices, not stock counts.
 3. Copy `.env.example` to `.env`.
 4. In Supabase **Project Settings → API**, copy the Project URL and the **service_role** key into `.env`:

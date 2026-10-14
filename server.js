@@ -212,6 +212,13 @@ app.post("/api/auth/login", dbRequired, async (req, res) => {
     .select("password_hash").eq("user_id", user.user_id).maybeSingle();
   if (accountError) return fail(res, accountError);
   if (!account?.password_hash) return fail(res, new Error("Authenticated account has no password hash."));
+  const authenticatedUser = { ...user, role: normalizeRole(user.role) };
+  if (!await recordActivity(req, res, {
+    action: "account.signed_in",
+    entityType: "account",
+    entityId: user.user_id,
+    summary: `${authenticatedUser.display_name} signed in.`
+  }, authenticatedUser)) return;
   setSessionCookie(res, createSessionToken(user.user_id, account.password_hash));
   res.json({ user });
 });
@@ -270,7 +277,13 @@ app.post("/api/auth/register", dbRequired, limitPublicOrderSubmissions, async (r
   res.status(201).json({ user });
 });
 
-app.post("/api/auth/logout", async (req, res) => {
+app.post("/api/auth/logout", requireAuth, async (req, res) => {
+  if (!await recordActivity(req, res, {
+    action: "account.signed_out",
+    entityType: "account",
+    entityId: req.user.user_id,
+    summary: `${req.user.display_name} signed out.`
+  })) return;
   clearSessionCookie(res);
   res.json({ ok: true });
 });
@@ -665,9 +678,19 @@ async function saveClientOrder(req, res, userId, isCustomer = false) {
     action: "order.placed",
     entityType: "client_order",
     entityId: orderId,
-    summary: `${isCustomer ? "Customer" : "Staff"} order recorded with ${quantities.size} item type${quantities.size === 1 ? "" : "s"}.`
+    summary: `${isCustomer ? "Customer" : "Staff"} order ${orderId} recorded with ${quantities.size} item type${quantities.size === 1 ? "" : "s"}.`
   })) return;
-  res.status(201).json({ id: orderId });
+  const { data: savedOrder, error: orderReadError } = await supabase.from("client_orders")
+    .select("id,receipt_number,created_at,client_name,client_email,client_phone,note,total,client_order_items(item_name,unit,quantity,unit_price,line_total)")
+    .eq("id", orderId).single();
+  if (orderReadError) {
+    console.error("Order was saved and logged, but the receipt details could not be loaded:", orderReadError);
+    return res.status(500).json({
+      error: `Order ${orderId} was saved, but its receipt could not be loaded. Do not submit it again; contact the administrator.`
+    });
+  }
+  const referenceNumber = `OR-${String(savedOrder.receipt_number).padStart(8, "0")}`;
+  res.status(201).json({ ...savedOrder, reference_number: referenceNumber });
 }
 
 app.get("/api/customer/items", customerRequired, async (req, res) => {
@@ -686,7 +709,7 @@ app.get("/api/orders/export", async (req, res) => {
   const pageSize = 1000;
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase.from("client_orders")
-      .select("id,client_name,client_email,client_phone,note,total,order_channel,created_at,ordered_by_account:accounts!client_orders_ordered_by_fkey(display_name),client_order_items(item_name,unit,quantity,unit_price,line_total)")
+      .select("id,receipt_number,client_name,client_email,client_phone,note,total,order_channel,created_at,ordered_by_account:accounts!client_orders_ordered_by_fkey(display_name),client_order_items(item_name,unit,quantity,unit_price,line_total)")
       .order("created_at", { ascending: true })
       .range(from, from + pageSize - 1);
     if (error) return fail(res, error);
@@ -700,6 +723,7 @@ app.get("/api/orders/export", async (req, res) => {
 
   const ordersSheet = workbook.addWorksheet("Orders");
   ordersSheet.columns = [
+    { header: "Receipt reference", key: "reference", width: 20 },
     { header: "Order ID", key: "id", width: 38 },
     { header: "Date", key: "date", width: 22 },
     { header: "Customer", key: "customer", width: 26 },
@@ -720,6 +744,7 @@ app.get("/api/orders/export", async (req, res) => {
       .map(item => `${item.item_name} (${item.quantity} ${item.unit})`)
       .join("; ");
     ordersSheet.addRow({
+      reference: `OR-${String(order.receipt_number).padStart(8, "0")}`,
       id: order.id,
       date: new Date(order.created_at),
       customer: order.client_name,
@@ -744,7 +769,7 @@ app.get("/api/orders/export", async (req, res) => {
 
   ordersSheet.getColumn("date").numFmt = "yyyy-mm-dd hh:mm";
   ordersSheet.getColumn("total").numFmt = '"₱"#,##0.00';
-  ordersSheet.autoFilter = { from: "A1", to: "J1" };
+  ordersSheet.autoFilter = { from: "A1", to: "K1" };
   ordersSheet.views = [{ state: "frozen", ySplit: 1 }];
 
   const salesSheet = workbook.addWorksheet("Sales Summary");
@@ -777,7 +802,7 @@ app.get("/api/orders/export", async (req, res) => {
 
 app.get("/api/orders", async (req, res) => {
   const { data, error } = await supabase.from("client_orders")
-    .select("id,client_name,client_email,client_phone,note,total,order_channel,created_at,ordered_by_account:accounts!client_orders_ordered_by_fkey(display_name),client_order_items(item_name,unit,quantity,unit_price,line_total)")
+    .select("id,receipt_number,client_name,client_email,client_phone,note,total,order_channel,created_at,ordered_by_account:accounts!client_orders_ordered_by_fkey(display_name),client_order_items(item_name,unit,quantity,unit_price,line_total)")
     .order("created_at", { ascending: false }).limit(100);
   if (error) return fail(res, error);
   res.json(data);

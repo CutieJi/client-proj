@@ -106,6 +106,7 @@ $("clientOrderForm").addEventListener("submit", async event => {
     $("clientOrderError").textContent = "Add at least one available material to your order.";
     return;
   }
+  if (!window.confirm("Are you sure you want to place this order?")) return;
   const button = $("submitClientOrder");
   button.disabled = true;
   try {
@@ -116,7 +117,8 @@ $("clientOrderForm").addEventListener("submit", async event => {
         items: state.cart.map(line => ({ item_id: line.itemId, quantity: line.quantity }))
       })
     });
-    $("clientOrderStatus").textContent = `Order received. Your reference number is ${order.id.slice(0, 8)}.`;
+    showCustomerOrderReceipt(order);
+    $("clientOrderStatus").textContent = `Order received. Reference number: ${order.reference_number}.`;
     $("clientOrderForm").reset();
     setAccountContact(state.user);
     state.cart = [];
@@ -128,6 +130,28 @@ $("clientOrderForm").addEventListener("submit", async event => {
     button.disabled = false;
   }
 });
+
+function showCustomerOrderReceipt(order) {
+  const items = order.client_order_items || [];
+  $("customerReceiptContent").innerHTML = `
+    <div class="receipt-brand">MATERIALS INVENTORY</div>
+    <h3>ORDER RECEIPT</h3>
+    <p class="receipt-reference"><span>Reference number</span><strong>${esc(order.reference_number)}</strong></p>
+    <div class="receipt-meta">
+      <span>Date</span><strong>${esc(new Date(order.created_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" }))}</strong>
+      <span>Customer</span><strong>${esc(order.client_name)}</strong>
+      <span>Email</span><strong>${esc(order.client_email)}</strong>
+      <span>Phone</span><strong>${esc(order.client_phone)}</strong>
+    </div>
+    <div class="receipt-items">${items.map(item => `<div class="receipt-item">
+      <span>${esc(item.item_name)}<small>${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)} × ${money(item.unit_price)}</small></span>
+      <strong>${money(item.line_total)}</strong>
+    </div>`).join("")}</div>
+    ${order.note ? `<p class="receipt-note"><span>Note</span>${esc(order.note)}</p>` : ""}
+    <div class="receipt-total"><span>Total</span><strong>${money(order.total)}</strong></div>
+    <p class="receipt-disclaimer">Order receipt for your records. This is not a tax invoice.</p>`;
+  $("customerReceiptModal").classList.remove("hidden");
+}
 
 function setAccountContact(user) {
   $("clientName").value = user.display_name || "";
@@ -257,6 +281,15 @@ $("confirmCustomerLogoutBtn").addEventListener("click", async () => {
     $("clientOrderError").textContent = error.message;
     button.disabled = false;
   }
+});
+$("customerPrintReceiptBtn").addEventListener("click", () => {
+  $("customerReceiptModal").classList.add("receipt-print-target");
+  document.body.classList.add("receipt-printing");
+  window.print();
+  window.setTimeout(() => {
+    document.body.classList.remove("receipt-printing");
+    $("customerReceiptModal").classList.remove("receipt-print-target");
+  }, 1000);
 });
 
 document.querySelectorAll("[data-close]").forEach(button => {

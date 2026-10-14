@@ -157,7 +157,7 @@ async function loadOrders() {
       const orderNote = order.note ? `<div class="material-meta">${esc(order.note)}</div>` : "";
       const contactDetails = [order.client_email, order.client_phone].filter(Boolean).map(esc).join("<br>");
       return `<tr>
-        <td>${esc(dateTime(order.created_at))}<div class="material-meta">Order ${esc(order.id.slice(0, 8))}</div></td>
+        <td>${esc(dateTime(order.created_at))}<div class="material-meta">${esc(`OR-${String(order.receipt_number).padStart(8, "0")}`)}</div></td>
         <td><div class="material-name">${esc(order.client_name)}</div>${contactDetails ? `<div class="material-meta">${contactDetails}</div>` : ""}${orderNote}</td>
         <td>${itemSummary}</td>
         <td class="price-cell">${money(order.total)}</td>
@@ -267,6 +267,28 @@ async function loadActivityLogs() {
     if (error.status === 401) return window.location.replace("/login.html");
     $("activityBody").innerHTML = `<tr><td colspan="5" class="empty-cell">${esc(error.message)}</td></tr>`;
   }
+}
+function showOrderReceipt(order) {
+  const items = order.client_order_items || [];
+  $("receiptContent").innerHTML = `
+    <div class="receipt-brand">MATERIALS INVENTORY</div>
+    <h3>ORDER RECEIPT</h3>
+    <p class="receipt-reference"><span>Reference number</span><strong>${esc(order.reference_number)}</strong></p>
+    <div class="receipt-meta">
+      <span>Date</span><strong>${esc(dateTime(order.created_at))}</strong>
+      <span>Customer</span><strong>${esc(order.client_name)}</strong>
+      <span>Email</span><strong>${esc(order.client_email)}</strong>
+      <span>Phone</span><strong>${esc(order.client_phone)}</strong>
+      ${state.user?.display_name ? `<span>Recorded by</span><strong>${esc(state.user.display_name)}</strong>` : ""}
+    </div>
+    <div class="receipt-items">${items.map(item => `<div class="receipt-item">
+      <span>${esc(item.item_name)}<small>${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)} × ${money(item.unit_price)}</small></span>
+      <strong>${money(item.line_total)}</strong>
+    </div>`).join("")}</div>
+    ${order.note ? `<p class="receipt-note"><span>Note</span>${esc(order.note)}</p>` : ""}
+    <div class="receipt-total"><span>Total</span><strong>${money(order.total)}</strong></div>
+    <p class="receipt-disclaimer">Order receipt for your records. This is not a tax invoice.</p>`;
+  openModal("receiptModal");
 }
 function showApp(user) {
   state.user = user;
@@ -545,7 +567,7 @@ $("orderForm").addEventListener("submit", async event => {
   const button = $("saveOrderBtn");
   button.disabled = true;
   try {
-    await api("/api/orders", {
+    const order = await api("/api/orders", {
       method: "POST",
       body: JSON.stringify({
         client_name: $("orderClientName").value,
@@ -556,6 +578,7 @@ $("orderForm").addEventListener("submit", async event => {
       })
     });
     closeModal("orderModal");
+    showOrderReceipt(order);
     toast("Client order saved and recorded.");
     await loadAll();
   } catch (error) {
@@ -567,6 +590,15 @@ $("orderForm").addEventListener("submit", async event => {
 });
 document.querySelectorAll(".nav-link").forEach(b => b.addEventListener("click", () => { setView(b.dataset.view); $("sidebar").classList.remove("open"); }));
 $("refreshActivityBtn").addEventListener("click", loadActivityLogs);
+$("printReceiptBtn").addEventListener("click", () => {
+  $("receiptModal").classList.add("receipt-print-target");
+  document.body.classList.add("receipt-printing");
+  window.print();
+  window.setTimeout(() => {
+    document.body.classList.remove("receipt-printing");
+    $("receiptModal").classList.remove("receipt-print-target");
+  }, 1000);
+});
 document.addEventListener("click", event => {
   if (!window.matchMedia("(max-width: 720px)").matches) return;
   const sidebar = $("sidebar");

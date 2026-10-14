@@ -147,6 +147,22 @@
       </div>
     </section>
   </div>
+  <div class="modal-backdrop hidden" id="customerReceiptModal">
+    <section class="modal compact-modal receipt-modal" role="dialog" aria-modal="true" aria-labelledby="customerReceiptTitle">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">ORDER COMPLETE</p>
+          <h2 id="customerReceiptTitle">Receipt</h2>
+        </div>
+        <button class="icon-button close-modal" data-close="customerReceiptModal" aria-label="Close">×</button>
+      </div>
+      <div id="customerReceiptContent" class="receipt-content"></div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" data-close="customerReceiptModal">Close</button>
+        <button type="button" class="primary-button" id="customerPrintReceiptBtn">Print receipt</button>
+      </div>
+    </section>
+  </div>
   <script src="/order.js"></script>
 </body>
 

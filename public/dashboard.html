@@ -213,7 +213,7 @@
           <div class="panel-header">
             <div>
               <h2>Activity logs</h2>
-              <p>Successful account, inventory, stock, and order changes. Passwords and contact details are never shown.</p>
+              <p>Customer, staff, and administrator account, inventory, stock, and order activity. Passwords and contact details are never shown.</p>
             </div>
             <button class="secondary-button" id="refreshActivityBtn" type="button">Refresh logs</button>
           </div>
@@ -361,6 +361,22 @@
       <div class="modal-actions"><button type="button" class="secondary-button"
           data-close="deleteModal">Cancel</button><button type="button" class="danger-button"
           id="confirmDeleteBtn">Delete item</button></div>
+    </section>
+  </div>
+  <div class="modal-backdrop hidden" id="receiptModal">
+    <section class="modal compact-modal receipt-modal" role="dialog" aria-modal="true" aria-labelledby="receiptTitle">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">ORDER COMPLETE</p>
+          <h2 id="receiptTitle">Receipt</h2>
+        </div>
+        <button class="icon-button close-modal" data-close="receiptModal" aria-label="Close">×</button>
+      </div>
+      <div id="receiptContent" class="receipt-content"></div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" data-close="receiptModal">Close</button>
+        <button type="button" class="primary-button" id="printReceiptBtn">Print receipt</button>
+      </div>
     </section>
   </div>
   <div class="modal-backdrop hidden" id="profileModal">

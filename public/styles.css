@@ -1092,6 +1092,115 @@ tbody tr:hover {
     font-size: 19px
 }
 
+.receipt-content {
+    color: var(--text);
+    font-size: 12px
+}
+
+.receipt-brand {
+    text-align: center;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.4px
+}
+
+.receipt-content h3 {
+    text-align: center;
+    font-size: 19px;
+    margin: 8px 0 16px
+}
+
+.receipt-reference {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 1px dashed var(--line);
+    border-bottom: 1px dashed var(--line)
+}
+
+.receipt-reference span,
+.receipt-meta span,
+.receipt-note span,
+.receipt-disclaimer {
+    color: var(--muted)
+}
+
+.receipt-reference strong {
+    font-size: 15px;
+    letter-spacing: .6px
+}
+
+.receipt-meta {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 8px 12px;
+    padding: 14px 0
+}
+
+.receipt-meta strong {
+    overflow-wrap: anywhere
+}
+
+.receipt-items {
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line)
+}
+
+.receipt-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0
+}
+
+.receipt-item + .receipt-item {
+    border-top: 1px solid var(--line)
+}
+
+.receipt-item span {
+    min-width: 0
+}
+
+.receipt-item small {
+    display: block;
+    color: var(--muted);
+    margin-top: 4px
+}
+
+.receipt-item strong {
+    white-space: nowrap
+}
+
+.receipt-note {
+    margin: 12px 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere
+}
+
+.receipt-note span {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    margin-bottom: 4px
+}
+
+.receipt-total {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 0;
+    font-size: 15px
+}
+
+.receipt-disclaimer {
+    text-align: center;
+    font-size: 10px;
+    margin: 4px 0 0
+}
+
 .icon-button {
     border: 1px solid var(--line);
     border-radius: 6px;
@@ -1555,5 +1664,40 @@ body.dark .table-footer {
 
     .page-foot {
         line-height: 1.6
+    }
+}
+
+@media print {
+    body.receipt-printing * {
+        visibility: hidden !important
+    }
+
+    body.receipt-printing .receipt-print-target,
+    body.receipt-printing .receipt-print-target * {
+        visibility: visible !important
+    }
+
+    body.receipt-printing .receipt-print-target {
+        position: fixed;
+        inset: 0;
+        display: grid !important;
+        place-items: start center;
+        padding: 0;
+        background: #fff;
+        z-index: 9999
+    }
+
+    body.receipt-printing .receipt-modal {
+        width: 100%;
+        max-width: 500px;
+        max-height: none;
+        overflow: visible;
+        border-radius: 0;
+        box-shadow: none
+    }
+
+    body.receipt-printing .receipt-modal .modal-actions,
+    body.receipt-printing .receipt-modal .close-modal {
+        display: none !important
     }
 }
