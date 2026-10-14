@@ -9,7 +9,9 @@ A modern, minimal inventory app for the handwritten building-material price list
 - Add, edit, and delete material records
 - Stock-in, stock-out, and adjustment forms
 - Stock movement history
-- Client order entry with saved order history, order totals, and automatic stock deductions
+- Client order entry with saved order history, order totals, automatic stock deductions, and required client name, email, and 11-digit phone details
+- Staff order entry can select a registered customer to prefill their contact details or enter a new client
+- Export all saved orders and daily sales totals to an Excel workbook
 - Customer login by email or username and self-registration before ordering
 - Authenticated customer ordering page; orders are stored and deducted from stock atomically
 - Required display name, username, email address, and exactly 11-digit phone number on every new account
@@ -25,6 +27,7 @@ A modern, minimal inventory app for the handwritten building-material price list
 
 - Node.js 18 or later
 - A Supabase project
+- Excel order export uses the `exceljs` package installed with project dependencies
 
 ## Setup
 
@@ -99,6 +102,8 @@ The initial list is a best-effort transcription. Several handwritten brand names
 - `GET /api/transactions`
 - `POST /api/transactions`
 - `GET /api/orders`
+- `GET /api/order-clients` (staff; lists registered customers for the client-order form)
+- `GET /api/orders/export` (staff; downloads an Excel workbook with orders and daily sales summary)
 - `POST /api/orders` (records a client order, deducts stock, and creates stock-out history atomically)
 - `GET /api/customer/items` (customer account required)
 - `POST /api/customer/orders` (customer account required; limited to 10 requests per IP address per 15 minutes)

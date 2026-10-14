@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const state = { items: [], users: [], user: null, view: "inventory", toastTimer: null, itemToDelete: null, userToDelete: null, orderLines: [], nextOrderLineId: 1 };
+const state = { items: [], users: [], orderClients: [], user: null, view: "inventory", toastTimer: null, itemToDelete: null, userToDelete: null, orderLines: [], nextOrderLineId: 1 };
 const money = (n) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 2 }).format(Number(n || 0));
 const dateTime = (s) => new Date(s).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
 const dateOnly = (s) => s ? new Date(s).toLocaleDateString("en-PH", { dateStyle: "medium" }) : "—";
@@ -118,12 +118,35 @@ function updateOrderTotal() {
   }, 0);
   $("orderTotal").textContent = money(total);
 }
-function openOrderModal() {
+async function openOrderModal() {
   $("orderForm").reset();
   $("orderError").textContent = "";
+  $("orderClientName").value = "";
+  $("orderClientEmail").value = "";
+  $("orderClientPhone").value = "";
+  $("orderClientSelect").disabled = true;
+  $("orderClientSelect").innerHTML = `<option value="new">Loading customers…</option>`;
   state.orderLines = [{ id: state.nextOrderLineId++, itemId: "", quantity: "1" }];
   renderOrderLines();
   openModal("orderModal");
+  try {
+    state.orderClients = await api("/api/order-clients");
+    $("orderClientSelect").innerHTML = `<option value="new">New client</option>` + state.orderClients.map(client =>
+      `<option value="${esc(client.user_id)}">${esc(client.display_name)} · ${esc(client.email)}</option>`
+    ).join("");
+    $("orderClientSelect").value = "new";
+  } catch (error) {
+    $("orderClientSelect").innerHTML = `<option value="new">New client</option>`;
+    $("orderError").textContent = `Could not load customers: ${error.message}`;
+  } finally {
+    $("orderClientSelect").disabled = false;
+  }
+}
+function setSelectedOrderClient() {
+  const client = state.orderClients.find(entry => entry.user_id === $("orderClientSelect").value);
+  $("orderClientName").value = client?.display_name || "";
+  $("orderClientEmail").value = client?.email || "";
+  $("orderClientPhone").value = client?.phone_number || "";
 }
 async function loadOrders() {
   try {
@@ -345,6 +368,32 @@ $("accountForm").addEventListener("submit", async event => {
     button.disabled = false;
   }
 });
+$("exportOrdersBtn").addEventListener("click", async () => {
+  const button = $("exportOrdersBtn");
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/orders/export");
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) return window.location.replace("/login.html");
+      throw new Error(data.error || `Export failed (${response.status})`);
+    }
+    const file = await response.blob();
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `orders-sales-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast("Orders and sales exported.");
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
 $("usersBody").addEventListener("click", event => {
   const button = event.target.closest("button[data-user-action]");
   if (!button) return;
@@ -390,6 +439,10 @@ $("inventoryDateSort").addEventListener("change", renderItems);
 $("movementDateSort").addEventListener("change", loadTransactions);
 $("movementSearch").addEventListener("input", renderMovementOptions);
 $("newOrderBtn").addEventListener("click", openOrderModal);
+$("orderClientSelect").addEventListener("change", setSelectedOrderClient);
+$("orderClientPhone").addEventListener("input", event => {
+  event.target.value = event.target.value.replace(/\D/g, "").slice(0, 11);
+});
 $("addOrderLineBtn").addEventListener("click", () => {
   state.orderLines.push({ id: state.nextOrderLineId++, itemId: "", quantity: "1" });
   renderOrderLines();
@@ -435,6 +488,8 @@ $("orderForm").addEventListener("submit", async event => {
       method: "POST",
       body: JSON.stringify({
         client_name: $("orderClientName").value,
+        client_email: $("orderClientEmail").value,
+        client_phone: $("orderClientPhone").value,
         note: $("orderNote").value,
         items: state.orderLines.map(line => ({ item_id: line.itemId, quantity: line.quantity }))
       })

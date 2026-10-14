@@ -3,6 +3,7 @@ const express = require("express");
 const path = require("path");
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
+const ExcelJS = require("exceljs");
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -154,7 +155,8 @@ app.get("/dashboard.html", requireAuth, staffRequired, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "dashboard.html"));
 });
 app.get("/customer.html", requireAuth, customerRequired, (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "customer.html"));
+  res.set("Cache-Control", "private, no-store");
+  res.sendFile(path.join(__dirname, "protected", "customer.html"));
 });
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
@@ -244,7 +246,7 @@ app.use("/api", (req, res, next) => {
   requireAuth(req, res, next);
 });
 
-app.use(["/api/items", "/api/summary", "/api/transactions", "/api/orders"], staffRequired);
+app.use(["/api/items", "/api/summary", "/api/transactions", "/api/orders", "/api/order-clients"], staffRequired);
 
 app.get("/api/auth/me", (req, res) => res.json({ user: req.user }));
 
@@ -272,6 +274,15 @@ app.get("/api/users", staffRequired, async (req, res) => {
     .select("user_id,username,email,phone_number,display_name,role,created_at");
   if (req.user.role !== "admin") query = query.neq("role", "admin");
   const { data, error } = await query.order("created_at");
+  if (error) return fail(res, error);
+  res.json(data);
+});
+
+app.get("/api/order-clients", async (req, res) => {
+  const { data, error } = await supabase.from("accounts")
+    .select("user_id,email,phone_number,display_name")
+    .eq("role", "customer")
+    .order("display_name");
   if (error) return fail(res, error);
   res.json(data);
 });
@@ -455,11 +466,11 @@ async function saveClientOrder(req, res, userId, isCustomer = false) {
   if (!clientName || clientName.length > 120) {
     return res.status(400).json({ error: "Client name is required and must be 120 characters or fewer." });
   }
-  if ((userId === null || isCustomer) && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail) || clientEmail.length > 254)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail) || clientEmail.length > 254) {
     return res.status(400).json({ error: "Enter a valid email address (254 characters or fewer)." });
   }
-  if ((userId === null || isCustomer) && (!/^[+0-9() .-]{7,24}$/.test(clientPhone) || !/[0-9]/.test(clientPhone))) {
-    return res.status(400).json({ error: "Enter a valid phone number using 7–24 digits, spaces, or + ( ) . -." });
+  if (!/^[0-9]{11}$/.test(clientPhone)) {
+    return res.status(400).json({ error: "Phone number must contain exactly 11 digits." });
   }
   if (note.length > 500) return res.status(400).json({ error: "Order note must be 500 characters or fewer." });
   if (!Array.isArray(items) || items.length === 0 || items.length > 100) {
@@ -509,6 +520,100 @@ app.get("/api/customer/items", customerRequired, async (req, res) => {
 
 app.post("/api/customer/orders", customerRequired, limitPublicOrderSubmissions, (req, res) => saveClientOrder(req, res, req.user.user_id, true));
 app.post("/api/orders", (req, res) => saveClientOrder(req, res, req.user.user_id));
+
+app.get("/api/orders/export", async (req, res) => {
+  const exportedOrders = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase.from("client_orders")
+      .select("id,client_name,client_email,client_phone,note,total,order_channel,created_at,ordered_by_account:accounts!client_orders_ordered_by_fkey(display_name),client_order_items(item_name,unit,quantity,unit_price,line_total)")
+      .order("created_at", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) return fail(res, error);
+    exportedOrders.push(...data);
+    if (data.length < pageSize) break;
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Materials Inventory";
+  workbook.created = new Date();
+
+  const ordersSheet = workbook.addWorksheet("Orders");
+  ordersSheet.columns = [
+    { header: "Order ID", key: "id", width: 38 },
+    { header: "Date", key: "date", width: 22 },
+    { header: "Customer", key: "customer", width: 26 },
+    { header: "Email", key: "email", width: 32 },
+    { header: "Phone", key: "phone", width: 16 },
+    { header: "Order channel", key: "channel", width: 18 },
+    { header: "Recorded by", key: "recordedBy", width: 24 },
+    { header: "Items", key: "items", width: 52 },
+    { header: "Note", key: "note", width: 36 },
+    { header: "Total sales", key: "total", width: 16 }
+  ];
+
+  const salesByDay = new Map();
+  let totalSales = 0;
+  for (const order of exportedOrders) {
+    const total = Number(order.total);
+    const items = (order.client_order_items || [])
+      .map(item => `${item.item_name} (${item.quantity} ${item.unit})`)
+      .join("; ");
+    ordersSheet.addRow({
+      id: order.id,
+      date: new Date(order.created_at),
+      customer: order.client_name,
+      email: order.client_email,
+      phone: order.client_phone,
+      channel: order.order_channel === "online" ? "Customer website" : "Staff",
+      recordedBy: order.order_channel === "online"
+        ? "Customer website"
+        : order.ordered_by_account?.display_name || "Former account",
+      items,
+      note: order.note,
+      total
+    });
+
+    const day = new Date(order.created_at).toISOString().slice(0, 10);
+    const sales = salesByDay.get(day) || { orders: 0, total: 0 };
+    sales.orders += 1;
+    sales.total += total;
+    salesByDay.set(day, sales);
+    totalSales += total;
+  }
+
+  ordersSheet.getColumn("date").numFmt = "yyyy-mm-dd hh:mm";
+  ordersSheet.getColumn("total").numFmt = '"₱"#,##0.00';
+  ordersSheet.autoFilter = { from: "A1", to: "J1" };
+  ordersSheet.views = [{ state: "frozen", ySplit: 1 }];
+
+  const salesSheet = workbook.addWorksheet("Sales Summary");
+  salesSheet.addRow(["Sales report"]);
+  salesSheet.addRow(["Total sales", totalSales]);
+  salesSheet.addRow(["Number of orders", exportedOrders.length]);
+  salesSheet.addRow([]);
+  salesSheet.addRow(["Date", "Orders", "Sales"]);
+  for (const [day, sales] of [...salesByDay].sort(([a], [b]) => a.localeCompare(b))) {
+    salesSheet.addRow([day, sales.orders, sales.total]);
+  }
+  salesSheet.getRow(1).font = { bold: true, size: 16 };
+  salesSheet.getRow(5).font = { bold: true };
+  salesSheet.getColumn(1).width = 24;
+  salesSheet.getColumn(2).width = 18;
+  salesSheet.getColumn(3).width = 20;
+  salesSheet.getCell("B2").numFmt = '"₱"#,##0.00';
+  salesSheet.getColumn(3).numFmt = '"₱"#,##0.00';
+  salesSheet.autoFilter = { from: "A5", to: "C5" };
+  salesSheet.views = [{ state: "frozen", ySplit: 5 }];
+
+  const file = await workbook.xlsx.writeBuffer();
+  res.set({
+    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "Content-Disposition": `attachment; filename="orders-sales-${new Date().toISOString().slice(0, 10)}.xlsx"`,
+    "Cache-Control": "private, no-store"
+  });
+  res.send(Buffer.from(file));
+});
 
 app.get("/api/orders", async (req, res) => {
   const { data, error } = await supabase.from("client_orders")

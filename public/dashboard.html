@@ -163,7 +163,11 @@
             <div>
               <h2>Client orders</h2>
               <p>Saved orders, order totals, and the inventory they used.</p>
-            </div><button class="primary-button" id="newOrderBtn" type="button">＋ Record client order</button>
+            </div>
+            <div class="orders-actions">
+              <button class="secondary-button" id="exportOrdersBtn" type="button">Export orders &amp; sales</button>
+              <button class="primary-button" id="newOrderBtn" type="button">＋ Record client order</button>
+            </div>
           </div>
           <div class="table-wrap">
             <table>
@@ -298,8 +302,16 @@
         </div><button class="icon-button close-modal" data-close="orderModal" aria-label="Close">×</button>
       </div>
       <form id="orderForm">
-        <label class="field">Client name *<input id="orderClientName" maxlength="120" autocomplete="name" required
-            placeholder="Enter the client's name"></label>
+        <label class="field">Select customer <span class="required-mark">*</span><select id="orderClientSelect" required>
+            <option value="new">New client</option>
+          </select></label>
+        <label class="field">Client name <span class="required-mark">*</span><input id="orderClientName" maxlength="120"
+            autocomplete="name" required placeholder="Enter the client's name"></label>
+        <label class="field">Email address <span class="required-mark">*</span><input id="orderClientEmail" type="email"
+            maxlength="254" autocomplete="email" required placeholder="you@example.com"></label>
+        <label class="field">Phone number <span class="required-mark">*</span><input id="orderClientPhone" type="text"
+            maxlength="32" autocomplete="tel" inputmode="numeric" pattern="[0-9]{11}" required
+            placeholder="09123456789"></label>
         <div class="order-lines-heading">
           <strong>Order items</strong>
           <button class="secondary-button" id="addOrderLineBtn" type="button">＋ Add item</button>

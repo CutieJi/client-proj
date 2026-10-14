@@ -339,7 +339,7 @@ begin
   end if;
 
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(normalized_email, 0));
-  if exists (select 1 from public.accounts where email = normalized_email) then
+  if exists (select 1 from public.accounts as existing_email where existing_email.email = normalized_email) then
     raise exception 'That email address is already in use.' using errcode = 'P0001';
   end if;
 

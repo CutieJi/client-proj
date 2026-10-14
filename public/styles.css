@@ -364,6 +364,12 @@ button {
     font-size: 10px
 }
 
+.orders-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px
+}
+
 .client-order-total {
     margin: 0 21px;
     padding: 15px 0;
@@ -1387,6 +1393,15 @@ body.dark .table-footer {
 }
 
 @media(max-width:720px) {
+    .orders-actions {
+        width: 100%;
+        flex-wrap: wrap
+    }
+
+    .orders-actions button {
+        flex: 1
+    }
+
     .client-order-header {
         padding: 10px 15px
     }

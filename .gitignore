@@ -1,10 +1,18 @@
 # Dependencies
 node_modules/
 
-# Environment variables and secrets
+# Local environment files and secrets
 .env
 .env.*
 !.env.example
+*.local
+*.secret
+*.secrets
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
 
 # Logs
 *.log
@@ -12,8 +20,37 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 
+# Runtime and generated files
+*.pid
+*.seed
+*.cache
+*.tsbuildinfo
+coverage/
+.nyc_output/
+dist/
+build/
+.vercel/
+.supabase/
+supabase/.temp/
+
+# Local exports and data
+/exports/
+*.xlsx
+*.sqlite
+*.sqlite3
+*.db
+
+# Temporary and backup files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
 # OS and editor files
 .DS_Store
 Thumbs.db
+Desktop.ini
 .vscode/
 .idea/
