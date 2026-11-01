@@ -59,7 +59,7 @@ create table if not exists public.accounts (
   phone_number text not null default '',
   password_hash text,
   display_name text not null default '',
-  role text not null check (role in ('admin','staff','customer')),
+  role text not null check (role in ('admin','staff')),
   created_at timestamptz not null default now()
 );
 
@@ -71,7 +71,8 @@ alter table public.accounts add column if not exists password_hash text;
 alter table public.accounts drop constraint if exists accounts_role_check;
 alter table public.accounts drop constraint if exists app_users_role_check;
 update public.accounts set role = 'staff' where role = 'user';
-alter table public.accounts add constraint accounts_role_check check (role in ('admin','staff','customer'));
+update public.accounts set role = 'staff' where role = 'customer' or role = 'user';
+alter table public.accounts add constraint accounts_role_check check (role in ('admin','staff'));
 do $$
 begin
   if exists (
@@ -125,6 +126,20 @@ alter table public.accounts add constraint accounts_phone_number_check
 alter table public.accounts alter column username set not null;
 create unique index if not exists accounts_username_idx on public.accounts(username);
 alter table public.accounts alter column user_id set default gen_random_uuid();
+
+create table if not exists public.customers (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text not null default '',
+  email text not null default '',
+  address text not null default '',
+  notes text not null default '',
+  created_by uuid references public.accounts(user_id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists customers_name_idx on public.customers(name);
+alter table public.customers enable row level security;
 
 create table if not exists public.admin_activity_logs (
   id uuid primary key default gen_random_uuid(),
@@ -350,63 +365,8 @@ $$;
 revoke all on function public.authenticate_app_user(text, text) from public, anon, authenticated;
 grant execute on function public.authenticate_app_user(text, text) to service_role;
 
+drop function if exists public.register_customer(text, text, text, text, text);
 drop function if exists public.register_customer(text, text, text);
-create or replace function public.register_customer(
-  p_username text,
-  p_email text,
-  p_phone_number text,
-  p_display_name text,
-  p_password text
-)
-returns table (user_id uuid, username text, email text, phone_number text, display_name text, role text)
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  normalized_username text := lower(trim(p_username));
-  normalized_email text := lower(trim(p_email));
-  normalized_phone_number text := trim(p_phone_number);
-  normalized_display_name text := trim(p_display_name);
-  saved_user_id uuid;
-begin
-  if normalized_username is null or normalized_username !~ '^[a-z0-9][a-z0-9._-]{2,31}$' then
-    raise exception 'Username must be 3-32 characters: letters, numbers, periods, underscores, or hyphens.' using errcode = 'P0001';
-  end if;
-  if normalized_display_name is null or normalized_display_name = '' or length(normalized_display_name) > 120 then
-    raise exception 'Name is required and must be 120 characters or fewer.' using errcode = 'P0001';
-  end if;
-  if normalized_email is null or normalized_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' or length(normalized_email) > 254 then
-    raise exception 'Enter a valid email address (254 characters or fewer).' using errcode = 'P0001';
-  end if;
-  if normalized_phone_number is null or normalized_phone_number !~ '^[0-9]{11}$' then
-    raise exception 'Phone number must contain exactly 11 digits.' using errcode = 'P0001';
-  end if;
-  if length(coalesce(p_password, '')) < 8 then
-    raise exception 'Password must be at least 8 characters.' using errcode = 'P0001';
-  end if;
-
-  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(normalized_email, 0));
-  if exists (select 1 from public.accounts as existing_email where existing_email.email = normalized_email) then
-    raise exception 'That email address is already in use.' using errcode = 'P0001';
-  end if;
-
-  insert into public.accounts (username, email, phone_number, display_name, password_hash, role)
-  values (
-    normalized_username, normalized_email, normalized_phone_number, normalized_display_name,
-    extensions.crypt(p_password, extensions.gen_salt('bf', 12)), 'customer'
-  )
-  returning accounts.user_id into saved_user_id;
-
-  return query
-  select users.user_id, users.username, users.email, users.phone_number, users.display_name, users.role
-  from public.accounts as users
-  where users.user_id = saved_user_id;
-end;
-$$;
-
-revoke all on function public.register_customer(text, text, text, text, text) from public, anon, authenticated;
-grant execute on function public.register_customer(text, text, text, text, text) to service_role;
 
 create or replace function public.change_app_user_password(
   p_user_id uuid,
@@ -483,7 +443,7 @@ begin
   if normalized_phone_number is null or normalized_phone_number !~ '^[0-9]{11}$' then
     raise exception 'Phone number must contain exactly 11 digits.';
   end if;
-  if p_role is null or p_role not in ('admin', 'staff', 'customer') then
+  if p_role is null or p_role not in ('admin', 'staff') then
     raise exception 'Choose a valid account role.';
   end if;
 

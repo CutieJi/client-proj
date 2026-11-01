@@ -31,6 +31,16 @@
           <path d="M2 1h12a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1m0 2v10h12V3zm2 2h8v1H4zm0 3h8v1H4zm0 3h5v1H4z" />
         </svg></span> Client orders
       </button>
+      <button class="nav-link" data-view="sales">
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
+          <path d="M0 2a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1zm4 10V6H2v6zm4 0V4H6v8zm4 0V8h-2v4zm2 0V3h-1.5v9z"/>
+        </svg></span> Sales per day
+      </button>
+      <button class="nav-link" data-view="customers">
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
+          <path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"/>
+        </svg></span> Customers
+      </button>
       <button class="nav-link hidden" data-view="users" id="usersNavLink">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
           <path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-7.5 6c.3-.8.9-2.2 2-3.2-.5-.2-1-.3-1.5-.3-3 0-4 2.3-4 3.2 0 .2.1.3.3.3zM4 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
@@ -66,12 +76,18 @@
       <section class="page">
         <div class="page-heading">
           <div>
-            <p class="eyebrow">MATERIALS MANAGEMENT</p>
+            <p class="eyebrow" id="pageEyebrow">MATERIALS MANAGEMENT</p>
             <h1 id="pageTitle">Inventory</h1>
             <p class="subheading" id="pageSubtitle">Track materials, stock levels, and current prices.</p>
           </div>
-          <button class="primary-button" id="addItemBtn"><span>＋</span> Add item</button>
+          <div class="page-heading-actions">
+            <button class="primary-button hidden" id="addItemBtn"><span>＋</span> Add item</button>
+            <button class="primary-button hidden" id="pageNewOrderBtn"><span>＋</span> Record client order</button>
+            <button class="primary-button hidden" id="pageAddCustomerBtn"><span>＋</span> Add customer</button>
+          </div>
         </div>
+
+        <!-- Inventory Stats -->
         <div class="stats-grid" id="statsGrid">
           <article class="stat-card">
             <div class="stat-top"><span>Total products</span></div><strong
@@ -90,11 +106,33 @@
               id="lowStock">—</strong><small>At or below threshold</small>
           </article>
         </div>
+
+        <!-- Sales Stats -->
+        <div class="stats-grid hidden" id="salesStatsGrid">
+          <article class="stat-card">
+            <div class="stat-top"><span>Total revenue</span></div>
+            <strong id="salesTotalRevenue">₱0.00</strong><small>All completed orders</small>
+          </article>
+          <article class="stat-card">
+            <div class="stat-top"><span>Total orders</span></div>
+            <strong id="salesTotalOrders">0</strong><small>Orders placed</small>
+          </article>
+          <article class="stat-card">
+            <div class="stat-top"><span>Total items sold / deducted</span></div>
+            <strong id="salesTotalItems">0</strong><small>Units deducted from inventory</small>
+          </article>
+          <article class="stat-card">
+            <div class="stat-top"><span>Today's sales</span></div>
+            <strong id="salesTodayRevenue">₱0.00</strong><small id="salesTodayCount">0 orders today</small>
+          </article>
+        </div>
+
+        <!-- INVENTORY PANEL -->
         <section class="panel" id="inventoryPanel">
           <div class="panel-header">
             <div>
               <h2 id="tableTitle">All materials</h2>
-              <p id="tableSubtitle">Review products and update stock.</p>
+              <p id="tableSubtitle">Review products and current stock quantities.</p>
             </div><button class="secondary-button" id="refreshBtn">↻ Refresh</button>
           </div>
           <div class="toolbar" id="inventoryToolbar"><label class="search-box"><span>⌕</span><input id="searchInput"
@@ -121,7 +159,7 @@
                   <th>Unit price</th>
                   <th>Date added</th>
                   <th>Stock status</th>
-                  <th></th>
+                  <th id="inventoryActionsHeader">Actions</th>
                 </tr>
               </thead>
               <tbody id="inventoryBody">
@@ -133,17 +171,27 @@
           </div>
           <div class="table-footer"><span id="rowCount">—</span><span>Prices in Philippine pesos (₱)</span></div>
         </section>
+
+        <!-- STOCK MOVEMENTS / DEDUCTIONS PANEL -->
         <section class="panel hidden" id="transactionsPanel">
           <div class="panel-header">
             <div>
-              <h2>Stock movements</h2>
-              <p>Recent stock-in, stock-out, and adjustment records.</p>
-            </div><button class="secondary-button" id="newMovementBtn">＋ Record movement</button>
+              <h2>Stock movements &amp; deductions</h2>
+              <p>Detailed log of stock-ins, stock-outs (deductions from sales), and adjustments.</p>
+            </div><button class="secondary-button hidden" id="newMovementBtn">＋ Record movement</button>
           </div>
-          <div class="toolbar"><select id="movementDateSort" aria-label="Sort stock movements by date">
+          <div class="toolbar">
+            <select id="movementTypeFilter" aria-label="Filter movement type">
+              <option value="all">All movement types</option>
+              <option value="stock_out">Stock out (deductions only)</option>
+              <option value="stock_in">Stock in only</option>
+              <option value="adjustment">Adjustments only</option>
+            </select>
+            <select id="movementDateSort" aria-label="Sort stock movements by date">
               <option value="newest">Date: newest first</option>
               <option value="oldest">Date: oldest first</option>
-            </select></div>
+            </select>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -153,7 +201,7 @@
                   <th>Movement</th>
                   <th>Quantity</th>
                   <th>Balance after</th>
-                  <th>Note</th>
+                  <th>Reason / Note</th>
                 </tr>
               </thead>
               <tbody id="transactionsBody">
@@ -163,12 +211,15 @@
               </tbody>
             </table>
           </div>
+          <div class="table-footer"><span>Showing stock changes and deductions</span></div>
         </section>
+
+        <!-- CLIENT ORDERS PANEL -->
         <section class="panel hidden" id="ordersPanel">
           <div class="panel-header">
             <div>
               <h2>Client orders</h2>
-              <p>Saved orders, order totals, and the inventory they used.</p>
+              <p>Saved orders, order totals, and stock deducted for each transaction.</p>
             </div>
             <div class="orders-actions">
               <button class="secondary-button" id="exportOrdersBtn" type="button">Export orders &amp; sales</button>
@@ -177,17 +228,80 @@
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Date</th><th>Client</th><th>Items</th><th>Order total</th><th>Recorded by</th></tr></thead>
+              <thead><tr><th>Date</th><th>Client</th><th>Items ordered</th><th>Order total</th><th>Encoded by</th></tr></thead>
               <tbody id="ordersBody"><tr><td colspan="5" class="empty-cell">Loading client orders…</td></tr></tbody>
             </table>
           </div>
-          <div class="table-footer"><span>Showing the 100 most recent orders</span><span>Prices in Philippine pesos (₱)</span></div>
+          <div class="table-footer"><span>Showing recent orders</span><span>Prices in Philippine pesos (₱)</span></div>
         </section>
+
+        <!-- SALES PER DAY PANEL -->
+        <section class="panel hidden" id="salesPanel">
+          <div class="panel-header">
+            <div>
+              <h2>Sales per day</h2>
+              <p>Daily sales totals, transaction volume, and items deducted from inventory.</p>
+            </div>
+            <button class="secondary-button" id="refreshSalesBtn" type="button">↻ Refresh sales</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Orders count</th>
+                  <th>Items sold / deducted</th>
+                  <th>Total daily sales</th>
+                </tr>
+              </thead>
+              <tbody id="dailySalesBody">
+                <tr><td colspan="4" class="empty-cell">Loading sales data…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-footer"><span>Sales aggregated per calendar day</span><span>Prices in Philippine pesos (₱)</span></div>
+        </section>
+
+        <!-- CUSTOMER DATABASE PANEL -->
+        <section class="panel hidden" id="customersPanel">
+          <div class="panel-header">
+            <div>
+              <h2>Customer database &amp; purchase history</h2>
+              <p>Database ng mga customer na bumili, kasama ang kanilang pangalan, address, petsa ng purchase, at mga gamit na binili.</p>
+            </div>
+            <button class="primary-button" id="addCustomerBtn" type="button">＋ Add customer</button>
+          </div>
+          <div class="toolbar">
+            <label class="search-box"><span>⌕</span><input id="customerSearchInput" type="search" placeholder="Search customer by name, phone, address, or items..."></label>
+            <button class="secondary-button" id="refreshCustomersBtn" type="button">↻ Refresh</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Customer name</th>
+                  <th>Phone number</th>
+                  <th>Address</th>
+                  <th>Date of purchase</th>
+                  <th>Purchased items</th>
+                  <th>Total purchases</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="customersBody">
+                <tr><td colspan="7" class="empty-cell">Loading customer database…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-footer"><span id="customerCount">—</span></div>
+        </section>
+
+        <!-- USER MANAGEMENT PANEL (Admin Only) -->
         <section class="panel hidden" id="usersPanel">
           <div class="panel-header">
             <div>
               <h2>Application accounts</h2>
-              <p>Administrators can create and manage staff, customer, and administrator accounts.</p>
+              <p>Super administrators can create and manage staff and administrator accounts.</p>
             </div>
             <div class="toolbar">
               <select id="userSort" aria-label="Sort accounts">
@@ -204,16 +318,18 @@
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Username</th><th>Email</th><th>Phone</th><th>Display name</th><th>Role</th><th>Date added</th><th></th></tr></thead>
+              <thead><tr><th>Username</th><th>Email</th><th>Phone</th><th>Display name</th><th>Role</th><th>Date added</th><th>Actions</th></tr></thead>
               <tbody id="usersBody"><tr><td colspan="7" class="empty-cell">Loading accounts…</td></tr></tbody>
             </table>
           </div>
         </section>
+
+        <!-- ACTIVITY LOGS PANEL (Admin Only) -->
         <section class="panel hidden" id="activityPanel">
           <div class="panel-header">
             <div>
               <h2>Activity logs</h2>
-              <p>Customer, staff, and administrator account, inventory, stock, and order activity. Passwords and contact details are never shown.</p>
+              <p>Staff and administrator inventory, stock, and order activity.</p>
             </div>
             <button class="secondary-button" id="refreshActivityBtn" type="button">Refresh logs</button>
           </div>
@@ -223,14 +339,15 @@
               <tbody id="activityBody"><tr><td colspan="5" class="empty-cell">Loading activity logs…</td></tr></tbody>
             </table>
           </div>
-          <div class="table-footer"><span>Showing up to 500 most recent changes</span></div>
+          <div class="table-footer"><span>Showing recent changes</span></div>
         </section>
-        <p class="page-foot">Materials Inventory <span>•</span> Prices and initial quantities should be verified against
-          your supplier list.</p>
+
+        <p class="page-foot">Materials Inventory <span>•</span> System configured with Super Admin and Staff roles.</p>
       </section>
     </main>
   </div>
 
+  <!-- ADD / EDIT MATERIAL MODAL (Admin Only) -->
   <div class="modal-backdrop hidden" id="itemModal">
     <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-heading">
@@ -243,32 +360,36 @@
         <input type="hidden" id="itemId">
         <div class="form-grid">
           <label class="field span-2">Material name *<input id="itemName" required maxlength="120"
-              placeholder="e.g. Cement"></label>
+              placeholder="e.g. Eagle Cement"></label>
           <label class="field">Category *<select id="itemCategory" required>
               <option value="">Select category</option>
               <option>Cement</option>
-              <option>Adhesive</option>
-              <option>Skimcoat</option>
+              <option>RSB</option>
+              <option>Aggregates</option>
+              <option>CHB</option>
+              <option>Tubulars</option>
               <option>Plywood</option>
-              <option>Sand</option>
-              <option>Gravel</option>
-              <option>CHB / Hollowblocks</option>
-              <option>Rebar</option>
-              <option>Hardiflex</option>
+              <option>Adhesives / Skimcoat</option>
+              <option>Paints</option>
+              <option>Pipes &amp; Fittings</option>
+              <option>Electrical</option>
+              <option>Hardware Items</option>
               <option>Other</option>
             </select></label>
-          <label class="field">Brand<input id="itemBrand" placeholder="e.g. ABC"></label>
-          <label class="field">Variant / size<input id="itemVariant" placeholder="e.g. 1/4 marine, 4×8"></label>
-          <label class="field">SKU / item code<input id="itemSku" placeholder="Optional"></label>
+          <label class="field">Brand<input id="itemBrand" placeholder="e.g. Eagle, Kenneth"></label>
+          <label class="field">Variant / size<input id="itemVariant" placeholder="e.g. 10mm, 40kg, 1/4"></label>
+          <label class="field">SKU / item code<input id="itemSku" placeholder="Optional SKU"></label>
           <label class="field">Unit<select id="itemUnit">
               <option value="piece">piece</option>
               <option value="bag">bag</option>
               <option value="kilo">kilo</option>
-              <option value="elf">elf</option>
               <option value="length">length</option>
               <option value="sheet">sheet</option>
               <option value="box">box</option>
               <option value="set">set</option>
+              <option value="drum">drum</option>
+              <option value="gallon">gallon</option>
+              <option value="meter">meter</option>
             </select></label>
           <label class="field">Quantity in stock *<input id="itemQuantity" type="number" min="0" step="0.01" value="0"
               required></label>
@@ -277,7 +398,7 @@
           <label class="field">Low-stock threshold<input id="itemThreshold" type="number" min="0" step="1"
               value="5"></label>
           <label class="field span-2">Notes<textarea id="itemNotes" rows="2"
-              placeholder="Optional details"></textarea></label>
+              placeholder="Optional supplier or storage details"></textarea></label>
         </div>
         <p class="form-error" id="itemError"></p>
         <div class="modal-actions"><button type="button" class="secondary-button"
@@ -287,6 +408,51 @@
     </section>
   </div>
 
+  <!-- QUICK ADD STOCK MODAL (Admin Only) -->
+  <div class="modal-backdrop hidden" id="addStockModal">
+    <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="addStockTitle">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">STOCK IN / RESTOCK</p>
+          <h2 id="addStockTitle">Add Arrived Stock</h2>
+        </div><button class="icon-button close-modal" data-close="addStockModal" aria-label="Close">×</button>
+      </div>
+      <form id="addStockForm">
+        <input type="hidden" id="addStockItemId">
+        <div style="background:#f0f4f8;padding:12px;border-radius:8px;margin-bottom:12px;">
+          <div style="font-size:11px;color:#697587;font-weight:700;">MATERIAL / ITEM</div>
+          <strong id="addStockItemName" style="font-size:16px;color:#172b4d;">—</strong>
+          <div style="margin-top:6px;font-size:12px;color:#546780;">
+            Current stock on hand: <strong id="addStockCurrentQty" style="color:#237a55;">0</strong>
+          </div>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Quantity to add (Bagong dating na stock) <span class="required-mark">*</span></span>
+          <input id="addStockQty" type="number" min="0.01" step="0.01" required placeholder="Halimbawa: 50">
+          <small>Ilagay kung ilan ang bagong dating na stock na idaragdag.</small>
+        </label>
+
+        <div style="background:#eaf6ef;border:1px solid #c9ecda;padding:10px 14px;border-radius:6px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:12px;color:#237a55;font-weight:600;">Bagong kabuuang stock:</span>
+          <strong id="addStockNewTotal" style="font-size:17px;color:#237a55;">—</strong>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Note / Supplier Reference</span>
+          <input id="addStockNote" placeholder="Halimbawa: Arrived from supplier / Kenneth / DR#123">
+        </label>
+
+        <p class="form-error" id="addStockError" role="alert"></p>
+        <div class="modal-actions">
+          <button type="button" class="secondary-button" data-close="addStockModal">Cancel</button>
+          <button type="submit" class="primary-button" id="confirmAddStockBtn">Confirm &amp; Add Stock</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <!-- RECORD STOCK MOVEMENT MODAL (Admin Only) -->
   <div class="modal-backdrop hidden" id="movementModal">
     <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="movementTitle">
       <div class="modal-heading">
@@ -300,14 +466,14 @@
             placeholder="Type a name, brand, or SKU to narrow the list" autocomplete="off"></label>
         <label class="field">Material *<select id="movementItem" required></select></label>
         <label class="field">Movement type *<select id="movementType">
-            <option value="stock_in">Stock in · received</option>
-            <option value="stock_out">Stock out · used/sold</option>
+            <option value="stock_in">Stock in · received from supplier</option>
+            <option value="stock_out">Stock out · used / damaged / manual deduction</option>
             <option value="adjustment">Set exact balance</option>
           </select></label>
         <label class="field">Quantity *<input id="movementQuantity" type="number" min="0.01" step="0.01" required
             placeholder="Enter quantity"></label>
         <label class="field">Note<textarea id="movementNote" rows="2"
-            placeholder="Delivery, project, reason..."></textarea></label>
+            placeholder="Supplier delivery, damage, adjustment reason..."></textarea></label>
         <p class="form-error" id="movementError"></p>
         <div class="modal-actions"><button type="button" class="secondary-button"
             data-close="movementModal">Cancel</button><button type="submit" class="primary-button">Save
@@ -315,6 +481,8 @@
       </form>
     </section>
   </div>
+
+  <!-- RECORD CLIENT ORDER MODAL (Staff & Admin) -->
   <div class="modal-backdrop hidden" id="orderModal">
     <section class="modal" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">
       <div class="modal-heading">
@@ -324,36 +492,40 @@
         </div><button class="icon-button close-modal" data-close="orderModal" aria-label="Close">×</button>
       </div>
       <form id="orderForm">
-        <label class="field"><span class="field-label">Select customer <span class="required-mark">*</span></span><select id="orderClientSelect" required>
-            <option value="new">New client</option>
+        <label class="field"><span class="field-label">Select customer from database</span><select id="orderClientSelect">
+            <option value="new">Walk-in / New customer</option>
           </select></label>
         <label class="field"><span class="field-label">Client name <span class="required-mark">*</span></span><input id="orderClientName" maxlength="120"
-            autocomplete="name" required placeholder="Enter the client's name"></label>
+            autocomplete="name" required placeholder="Enter client's full name"></label>
         <label class="field"><span class="field-label">Email address <span class="required-mark">*</span></span><input id="orderClientEmail" type="email"
-            maxlength="254" autocomplete="email" required placeholder="you@example.com"></label>
+            maxlength="254" autocomplete="email" required placeholder="client@example.com"></label>
         <label class="field"><span class="field-label">Phone number <span class="required-mark">*</span></span><input id="orderClientPhone" type="text"
-            maxlength="32" autocomplete="tel" inputmode="numeric" pattern="[0-9]{11}" required
-            placeholder="09123456789"></label>
+            maxlength="11" autocomplete="tel" inputmode="numeric" pattern="[0-9]{11}" required
+            placeholder="09123456789"><small>Enter exactly 11 digits.</small></label>
+        <label class="field"><span class="field-label">Delivery / Site address</span><input id="orderClientAddress" maxlength="300"
+            placeholder="Address ng customer o site delivery location"></label>
         <div class="order-lines-heading">
-          <strong>Order items</strong>
+          <strong>Order items (deducted from stock)</strong>
           <button class="secondary-button" id="addOrderLineBtn" type="button">＋ Add item</button>
         </div>
         <div id="orderLines" class="order-lines"></div>
         <label class="field">Note<textarea id="orderNote" rows="2" maxlength="500"
-            placeholder="Optional delivery or order details"></textarea></label>
+            placeholder="Delivery address, project reference, or payment terms"></textarea></label>
         <div class="order-total"><span>Order total</span><strong id="orderTotal">₱0.00</strong></div>
         <p class="form-error" id="orderError" role="alert"></p>
         <div class="modal-actions"><button type="button" class="secondary-button"
-            data-close="orderModal">Cancel</button><button type="submit" class="primary-button" id="saveOrderBtn">Save order</button></div>
+            data-close="orderModal">Cancel</button><button type="submit" class="primary-button" id="saveOrderBtn">Place order &amp; deduct stock</button></div>
       </form>
     </section>
   </div>
+
+  <!-- CONFIRM ORDER MODAL -->
   <div class="modal-backdrop hidden" id="orderConfirmModal">
     <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="orderConfirmTitle">
       <div class="modal-heading">
         <div>
           <p class="eyebrow">CONFIRM ORDER</p>
-          <h2 id="orderConfirmTitle">Are you sure?</h2>
+          <h2 id="orderConfirmTitle">Confirm order?</h2>
         </div>
       </div>
       <p class="delete-message">Place this order for <strong id="orderConfirmClient"></strong>?</p>
@@ -361,13 +533,63 @@
         <span id="orderConfirmItems"></span>
         <strong id="orderConfirmTotal"></strong>
       </div>
-      <p class="receipt-disclaimer">This records the order and updates inventory. No payment is processed.</p>
+      <p class="receipt-disclaimer">This will record the transaction and automatically deduct items from current stock.</p>
       <div class="modal-actions">
         <button type="button" class="secondary-button" data-close="orderConfirmModal">Cancel</button>
-        <button type="button" class="primary-button" id="confirmOrderBtn">Confirm order</button>
+        <button type="button" class="primary-button" id="confirmOrderBtn">Confirm and deduct stock</button>
       </div>
     </section>
   </div>
+
+  <!-- ADD / EDIT CUSTOMER MODAL (Staff) -->
+  <div class="modal-backdrop hidden" id="customerModal">
+    <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="customerModalTitle">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">CUSTOMER DATABASE</p>
+          <h2 id="customerModalTitle">Add customer</h2>
+        </div><button class="icon-button close-modal" data-close="customerModal" aria-label="Close">×</button>
+      </div>
+      <form id="customerForm">
+        <input type="hidden" id="customerId">
+        <label class="field"><span class="field-label">Full name / Company <span class="required-mark">*</span></span><input id="custName" maxlength="120"
+            autocomplete="name" required placeholder="e.g. Juan dela Cruz / ABC Builders"></label>
+        <label class="field"><span class="field-label">Phone number <span class="required-mark">*</span></span><input id="custPhone" type="text" maxlength="11"
+            autocomplete="tel" inputmode="numeric" pattern="[0-9]{11}" required
+            placeholder="09123456789"><small>Enter exactly 11 digits.</small></label>
+        <label class="field"><span class="field-label">Email address</span><input id="custEmail" type="email" maxlength="254"
+            autocomplete="email" placeholder="customer@example.com (optional)"></label>
+        <label class="field"><span class="field-label">Delivery address</span><textarea id="custAddress" rows="2" maxlength="300"
+            placeholder="Site address or delivery location"></textarea></label>
+        <label class="field"><span class="field-label">Notes</span><textarea id="custNotes" rows="2" maxlength="500"
+            placeholder="Special instructions, contact person, or terms"></textarea></label>
+        <p class="form-error" id="customerError" role="alert"></p>
+        <div class="modal-actions">
+          <button type="button" class="secondary-button" data-close="customerModal">Cancel</button>
+          <button type="submit" class="primary-button" id="saveCustomerBtn">Save customer</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <!-- DELETE CUSTOMER MODAL -->
+  <div class="modal-backdrop hidden" id="customerDeleteModal">
+    <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="customerDeleteTitle">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">DELETE CUSTOMER</p>
+          <h2 id="customerDeleteTitle">Remove customer?</h2>
+        </div>
+      </div>
+      <p class="delete-message">Are you sure you want to remove <strong id="deleteCustomerName"></strong> from the customer database?</p>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" data-close="customerDeleteModal">Cancel</button>
+        <button type="button" class="danger-button" id="confirmCustomerDeleteBtn">Delete customer</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- DELETE ITEM MODAL (Admin Only) -->
   <div class="modal-backdrop hidden" id="deleteModal">
     <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
       <div class="modal-heading">
@@ -376,13 +598,15 @@
           <h2 id="deleteTitle">Are you sure?</h2>
         </div>
       </div>
-      <p class="delete-message">Delete <strong id="deleteItemName"></strong>? Its existing movement history may be
+      <p class="delete-message">Delete <strong id="deleteItemName"></strong>? Existing movement history may be
         retained without the item details.</p>
       <div class="modal-actions"><button type="button" class="secondary-button"
           data-close="deleteModal">Cancel</button><button type="button" class="danger-button"
           id="confirmDeleteBtn">Delete item</button></div>
     </section>
   </div>
+
+  <!-- ORDER RECEIPT MODAL -->
   <div class="modal-backdrop hidden" id="receiptModal">
     <section class="modal compact-modal receipt-modal" role="dialog" aria-modal="true" aria-labelledby="receiptTitle">
       <div class="modal-heading">
@@ -399,6 +623,8 @@
       </div>
     </section>
   </div>
+
+  <!-- PROFILE MODAL -->
   <div class="modal-backdrop hidden" id="profileModal">
     <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
       <div class="modal-heading">
@@ -426,6 +652,8 @@
       </form>
     </section>
   </div>
+
+  <!-- ACCOUNT MODAL (Admin Only: Staff & Admin roles only) -->
   <div class="modal-backdrop hidden" id="accountModal">
     <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="accountModalTitle">
       <div class="modal-heading">
@@ -440,8 +668,8 @@
             pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,31}" autocomplete="off" required>
           <small>3–32 characters: letters, numbers, periods, underscores, or hyphens.</small></label>
         <label class="field"><span class="field-label">Email address <span class="required-mark">*</span></span><input id="accountEmail" type="email" maxlength="254"
-            autocomplete="email" required placeholder="you@example.com"></label>
-        <label class="field"><span class="field-label">Phone number <span class="required-mark">*</span></span><input id="accountPhoneNumber" type="text" maxlength="32"
+            autocomplete="email" required placeholder="user@example.com"></label>
+        <label class="field"><span class="field-label">Phone number <span class="required-mark">*</span></span><input id="accountPhoneNumber" type="text" maxlength="11"
             autocomplete="tel" inputmode="numeric" pattern="[0-9]{11}" required
             placeholder="09123456789"><small>Enter exactly 11 digits.</small></label>
         <label class="field"><span class="field-label">Display name <span class="required-mark">*</span></span><input id="accountDisplayName" maxlength="120" autocomplete="name" required></label>
@@ -449,7 +677,8 @@
             autocomplete="new-password"><small id="accountPasswordHint">At least 8 characters.</small></label>
         <label class="field"><span class="field-label">Role <span class="required-mark">*</span></span><select id="accountRole" required>
             <option value="" disabled>Choose role</option>
-            <option value="staff">Staff</option><option value="admin">Administrator</option><option value="customer">Customer</option>
+            <option value="staff">Staff (Encodes orders &amp; customers)</option>
+            <option value="admin">Administrator (Super Admin - Manages stock &amp; users)</option>
           </select></label>
         <p class="form-error" id="accountError" role="alert"></p>
         <div class="modal-actions"><button type="button" class="secondary-button"
@@ -458,6 +687,8 @@
       </form>
     </section>
   </div>
+
+  <!-- DELETE ACCOUNT MODAL (Admin Only) -->
   <div class="modal-backdrop hidden" id="accountDeleteModal">
     <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="accountDeleteTitle">
       <div class="modal-heading">
@@ -472,6 +703,8 @@
           id="confirmAccountDeleteBtn">Remove account</button></div>
     </section>
   </div>
+
+  <!-- LOGOUT CONFIRMATION MODAL -->
   <div class="modal-backdrop hidden" id="logoutModal">
     <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="logoutTitle">
       <div class="modal-heading">
@@ -487,6 +720,8 @@
       </div>
     </section>
   </div>
+
+  <!-- CHANGE PASSWORD MODAL -->
   <div class="modal-backdrop hidden" id="changePasswordModal">
     <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="changePasswordTitle">
       <div class="modal-heading">
@@ -509,6 +744,7 @@
       </form>
     </section>
   </div>
+
   <div class="toast" id="toast" role="status"></div>
   <script src="/app.js"></script>
 </body>

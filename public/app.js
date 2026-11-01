@@ -1,5 +1,21 @@
 const $ = (id) => document.getElementById(id);
-const state = { items: [], users: [], orderClients: [], user: null, view: "inventory", toastTimer: null, itemToDelete: null, userToDelete: null, orderLines: [], nextOrderLineId: 1 };
+const state = {
+  items: [],
+  transactions: [],
+  orders: [],
+  customers: [],
+  users: [],
+  salesSummary: null,
+  user: null,
+  view: "inventory",
+  toastTimer: null,
+  itemToDelete: null,
+  customerToDelete: null,
+  userToDelete: null,
+  orderLines: [],
+  nextOrderLineId: 1
+};
+
 const money = (n) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 2 }).format(Number(n || 0));
 const dateTime = (s) => new Date(s).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
 const dateOnly = (s) => s ? new Date(s).toLocaleDateString("en-PH", { dateStyle: "medium" }) : "—";
@@ -14,19 +30,25 @@ async function api(url, options = {}) {
   }
   return data;
 }
+
 function toast(message) {
-  $("toast").textContent = message; $("toast").classList.add("show");
-  clearTimeout(state.toastTimer); state.toastTimer = setTimeout(() => $("toast").classList.remove("show"), 3200);
+  $("toast").textContent = message;
+  $("toast").classList.add("show");
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(() => $("toast").classList.remove("show"), 3200);
 }
+
 function esc(value = "") {
   return String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
+
 function stockStatus(item) {
   const qty = Number(item.quantity), threshold = Number(item.low_stock_threshold);
   if (qty <= 0) return ["Out of stock", "stock-empty"];
   if (qty <= threshold) return ["Low stock", "stock-low"];
   return ["In stock", "stock-good"];
 }
+
 async function loadAll() {
   try {
     const [items, summary, health] = await Promise.all([api("/api/items"), api("/api/summary"), api("/api/health")]);
@@ -36,46 +58,106 @@ async function loadAll() {
     $("stockUnits").textContent = summary.stockUnits.toLocaleString("en-PH");
     $("inventoryValue").textContent = money(summary.inventoryValue);
     $("lowStock").textContent = summary.lowStock.toLocaleString("en-PH");
-    renderCategories(); renderItems(); renderMovementOptions(); renderOrderLines();
+    renderCategories();
+    renderItems();
+    renderMovementOptions();
+
     if (state.view === "transactions") await loadTransactions();
     if (state.view === "orders") await loadOrders();
+    if (state.view === "sales") await loadSalesSummary();
+    if (state.view === "customers") await loadCustomers();
   } catch (error) {
-    if (error.status === 401) return window.location.replace("/login.html");
+    if (error.status === 401) return window.location.replace("/");
     $("connectionText").textContent = "Connection issue";
-    $("inventoryBody").innerHTML = `<tr><td colspan="8" class="empty-cell">${esc(error.message)}<br><br>Check your .env file and run supabase/schema.sql in the Supabase SQL Editor.</td></tr>`;
+    $("inventoryBody").innerHTML = `<tr><td colspan="8" class="empty-cell">${esc(error.message)}</td></tr>`;
     $("rowCount").textContent = "Unable to load";
     ["totalItems", "stockUnits", "inventoryValue", "lowStock"].forEach(id => $(id).textContent = "—");
   }
 }
+
+// INVENTORY
 function renderCategories() {
   const select = $("categoryFilter"), current = select.value || "All categories";
-  const cats = [...new Set(state.items.map(x => x.category))].sort();
+  const cats = [...new Set(state.items.map(x => x.category))].filter(Boolean).sort();
   select.innerHTML = `<option>All categories</option>${cats.map(c => `<option>${esc(c)}</option>`).join("")}`;
   select.value = cats.includes(current) ? current : "All categories";
 }
+
 function renderItems() {
   const search = $("searchInput").value.trim().toLowerCase();
   const category = $("categoryFilter").value, stock = $("stockFilter").value;
+  const isAdmin = state.user?.role === "admin";
+
   const rows = state.items.filter(item => {
     const haystack = [item.name, item.brand, item.variant, item.sku, item.category].join(" ").toLowerCase();
     const status = stockStatus(item)[0];
     return (!search || haystack.includes(search)) && (category === "All categories" || item.category === category) &&
       (stock === "all" || (stock === "low" && status !== "In stock") || (stock === "available" && Number(item.quantity) > 0) || (stock === "empty" && Number(item.quantity) <= 0));
   });
+
   const direction = $("inventoryDateSort").value === "oldest" ? 1 : -1;
   rows.sort((a, b) => direction * ((Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0)));
+
+  $("inventoryActionsHeader").textContent = isAdmin ? "Actions" : "Status / Permissions";
+
   $("inventoryBody").innerHTML = rows.length ? rows.map(item => {
     const [status, cls] = stockStatus(item);
+    const actionsHtml = isAdmin
+      ? `<div class="row-actions">
+           <button class="small-action" data-action="edit" data-id="${item.id}">Edit</button>
+           <button class="small-action" data-action="move" data-id="${item.id}">Stock</button>
+           <button class="small-action" data-action="delete" data-id="${item.id}">Delete</button>
+         </div>`
+      : `<span style="color:#7b8492;font-size:11px;">View only (Staff)</span>`;
+
     return `<tr>
-      <td><div class="material-name">${esc(item.name)}</div><div class="material-meta">${esc([item.brand, item.variant].filter(Boolean).join(" · ") || "No brand or size entered")}</div></td>
+      <td><div class="material-name">${esc(item.name)}</div><div class="material-meta">${esc([item.brand, item.variant].filter(Boolean).join(" · ") || "Standard")}</div></td>
       <td><span class="category-pill">${esc(item.category)}</span></td>
-      <td>${esc(item.sku || "—")}</td><td class="quantity-cell">${Number(item.quantity).toLocaleString("en-PH")} <span style="font-weight:400;color:#8993a1">${esc(item.unit)}</span></td>
-      <td class="price-cell">${money(item.unit_price)}</td><td>${esc(dateOnly(item.created_at))}</td><td><span class="stock-badge ${cls}">${status}</span></td>
-      <td><div class="row-actions"><button class="small-action" data-action="edit" data-id="${item.id}">Edit</button><button class="small-action" data-action="move" data-id="${item.id}">Stock</button><button class="small-action" data-action="delete" data-id="${item.id}">Delete</button></div></td>
+      <td>${esc(item.sku || "—")}</td>
+      <td class="quantity-cell">${Number(item.quantity).toLocaleString("en-PH")} <span style="font-weight:400;color:#8993a1">${esc(item.unit)}</span></td>
+      <td class="price-cell">${money(item.unit_price)}</td>
+      <td>${esc(dateOnly(item.created_at))}</td>
+      <td><span class="stock-badge ${cls}">${status}</span></td>
+      <td>${actionsHtml}</td>
     </tr>`;
   }).join("") : `<tr><td colspan="8" class="empty-cell">No materials match your filters.</td></tr>`;
+
   $("rowCount").textContent = `Showing ${rows.length} of ${state.items.length} items`;
 }
+
+function resetItemForm() {
+  $("itemForm").reset();
+  $("itemId").value = "";
+  $("itemQuantity").value = "0";
+  $("itemPrice").value = "0";
+  $("itemThreshold").value = "5";
+  $("modalTitle").textContent = "Add material";
+  $("saveItemBtn").textContent = "Save item";
+  $("itemError").textContent = "";
+}
+
+function editItem(item) {
+  resetItemForm();
+  $("modalTitle").textContent = "Edit material";
+  $("saveItemBtn").textContent = "Save changes";
+  $("itemId").value = item.id;
+  const map = {
+    itemName: "name",
+    itemCategory: "category",
+    itemBrand: "brand",
+    itemVariant: "variant",
+    itemSku: "sku",
+    itemUnit: "unit",
+    itemQuantity: "quantity",
+    itemPrice: "unit_price",
+    itemThreshold: "low_stock_threshold",
+    itemNotes: "notes"
+  };
+  Object.entries(map).forEach(([id, key]) => $(id).value = item[key] ?? "");
+  openModal("itemModal");
+}
+
+// STOCK MOVEMENTS & DEDUCTIONS
 function renderMovementOptions() {
   const select = $("movementItem"), selectedId = select.value;
   const query = $("movementSearch").value.trim().toLowerCase();
@@ -87,6 +169,69 @@ function renderMovementOptions() {
     matches.map(item => `<option value="${esc(item.id)}">${esc(item.name)}${item.brand ? " · " + esc(item.brand) : ""}${item.variant ? " · " + esc(item.variant) : ""} (stock: ${Number(item.quantity)})</option>`).join("");
   select.value = selectedId;
 }
+
+async function loadTransactions() {
+  try {
+    const rows = await api("/api/transactions");
+    state.transactions = rows;
+    renderTransactions();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("transactionsBody").innerHTML = `<tr><td colspan="6" class="empty-cell">${esc(error.message)}</td></tr>`;
+  }
+}
+
+function renderTransactions() {
+  const typeFilter = $("movementTypeFilter").value;
+  const rows = state.transactions.filter(x => typeFilter === "all" || x.type === typeFilter);
+  const direction = $("movementDateSort").value === "oldest" ? 1 : -1;
+  rows.sort((a, b) => direction * ((Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0)));
+
+  $("transactionsBody").innerHTML = rows.length ? rows.map(x => {
+    const movementLabel = {
+      stock_in: "Stock in (+)",
+      stock_out: "Stock out / Deducted (-)",
+      adjustment: "Adjustment (=)"
+    }[x.type] || esc(x.type);
+
+    const movementPillCls = x.type === "stock_out" ? "style='background:#fff0ef;color:#b74343;border:1px solid #fbd0ce;'" :
+      x.type === "stock_in" ? "style='background:#eaf6ef;color:#237a55;border:1px solid #c9ecda;'" : "";
+
+    return `<tr>
+      <td>${esc(dateTime(x.created_at))}</td>
+      <td><div class="material-name">${esc(x.inventory_items?.name || "Deleted item")}</div><div class="material-meta">${esc(x.inventory_items?.category || "")}</div></td>
+      <td><span class="category-pill" ${movementPillCls}>${movementLabel}</span></td>
+      <td><strong>${Number(x.quantity).toLocaleString("en-PH")}</strong> ${esc(x.inventory_items?.unit || "")}</td>
+      <td class="quantity-cell">${Number(x.balance_after).toLocaleString("en-PH")}</td>
+      <td>${esc(x.note || "—")}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="6" class="empty-cell">No stock movements found matching filter.</td></tr>`;
+}
+
+// CLIENT ORDERS
+async function loadOrders() {
+  try {
+    const orders = await api("/api/orders");
+    state.orders = orders;
+    $("ordersBody").innerHTML = orders.length ? orders.map(order => {
+      const items = order.client_order_items || [];
+      const itemSummary = items.map(item => `<div class="material-name">${esc(item.item_name)} · <strong>${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)}</strong></div><div class="material-meta">${money(item.line_total)}</div>`).join("");
+      const orderNote = order.note ? `<div class="material-meta">${esc(order.note)}</div>` : "";
+      const contactDetails = [order.client_phone, order.client_email].filter(Boolean).map(esc).join(" · ");
+      return `<tr>
+        <td>${esc(dateTime(order.created_at))}<div class="material-meta">${esc(`OR-${String(order.receipt_number).padStart(8, "0")}`)}</div></td>
+        <td><div class="material-name">${esc(order.client_name)}</div>${contactDetails ? `<div class="material-meta">${contactDetails}</div>` : ""}${orderNote}</td>
+        <td>${itemSummary}</td>
+        <td class="price-cell">${money(order.total)}</td>
+        <td>${esc(order.ordered_by_account?.display_name || "Staff")}</td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="5" class="empty-cell">No client orders yet. Staff can record orders to deduct stock.</td></tr>`;
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("ordersBody").innerHTML = `<tr><td colspan="5" class="empty-cell">${esc(error.message)}</td></tr>`;
+  }
+}
+
 function renderOrderLines() {
   const container = $("orderLines");
   if (!container) return;
@@ -104,6 +249,7 @@ function renderOrderLines() {
   }).join("") : `<p class="order-lines-empty">Add at least one material to this order.</p>`;
   updateOrderTotal();
 }
+
 function updateOrderTotal() {
   const quantities = new Map();
   state.orderLines.forEach(line => {
@@ -118,6 +264,7 @@ function updateOrderTotal() {
   }, 0);
   $("orderTotal").textContent = money(total);
 }
+
 async function openOrderModal() {
   $("orderForm").reset();
   $("orderError").textContent = "";
@@ -125,50 +272,158 @@ async function openOrderModal() {
   $("orderClientEmail").value = "";
   $("orderClientPhone").value = "";
   $("orderClientSelect").disabled = true;
-  $("orderClientSelect").innerHTML = `<option value="new">Loading customers…</option>`;
+  $("orderClientSelect").innerHTML = `<option value="new">Loading customers from database…</option>`;
   state.orderLines = [{ id: state.nextOrderLineId++, itemId: "", quantity: "1" }];
   renderOrderLines();
   openModal("orderModal");
+
   try {
-    state.orderClients = await api("/api/order-clients");
-    $("orderClientSelect").innerHTML = `<option value="new">New client</option>` + state.orderClients.map(client =>
-      `<option value="${esc(client.user_id)}">${esc(client.display_name)} · ${esc(client.email)}</option>`
-    ).join("");
+    const customers = await api("/api/customers");
+    state.customers = customers;
+    $("orderClientSelect").innerHTML = `<option value="new">Walk-in / New customer</option>` +
+      customers.map(c => `<option value="${esc(c.id)}">${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("");
     $("orderClientSelect").value = "new";
-  } catch (error) {
-    $("orderClientSelect").innerHTML = `<option value="new">New client</option>`;
-    $("orderError").textContent = `Could not load customers: ${error.message}`;
+  } catch {
+    $("orderClientSelect").innerHTML = `<option value="new">Walk-in / New customer</option>`;
   } finally {
     $("orderClientSelect").disabled = false;
   }
 }
-function setSelectedOrderClient() {
-  const client = state.orderClients.find(entry => entry.user_id === $("orderClientSelect").value);
-  $("orderClientName").value = client?.display_name || "";
-  $("orderClientEmail").value = client?.email || "";
-  $("orderClientPhone").value = client?.phone_number || "";
-}
-async function loadOrders() {
-  try {
-    const orders = await api("/api/orders");
-    $("ordersBody").innerHTML = orders.length ? orders.map(order => {
-      const items = order.client_order_items || [];
-      const itemSummary = items.map(item => `<div class="material-name">${esc(item.item_name)} · ${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)}</div><div class="material-meta">${money(item.line_total)}</div>`).join("");
-      const orderNote = order.note ? `<div class="material-meta">${esc(order.note)}</div>` : "";
-      const contactDetails = [order.client_email, order.client_phone].filter(Boolean).map(esc).join("<br>");
-      return `<tr>
-        <td>${esc(dateTime(order.created_at))}<div class="material-meta">${esc(`OR-${String(order.receipt_number).padStart(8, "0")}`)}</div></td>
-        <td><div class="material-name">${esc(order.client_name)}</div>${contactDetails ? `<div class="material-meta">${contactDetails}</div>` : ""}${orderNote}</td>
-        <td>${itemSummary}</td>
-        <td class="price-cell">${money(order.total)}</td>
-        <td>${esc(order.order_channel === "online" ? "Customer website" : order.ordered_by_account?.display_name || "Former account")}</td>
-      </tr>`;
-    }).join("") : `<tr><td colspan="5" class="empty-cell">No client orders yet. Record an order to start the history.</td></tr>`;
-  } catch (error) {
-    if (error.status === 401) return window.location.replace("/login.html");
-    $("ordersBody").innerHTML = `<tr><td colspan="5" class="empty-cell">${esc(error.message)}</td></tr>`;
+
+function onOrderClientSelected() {
+  const val = $("orderClientSelect").value;
+  if (val === "new") {
+    $("orderClientName").value = "";
+    $("orderClientEmail").value = "";
+    $("orderClientPhone").value = "";
+    return;
+  }
+  const customer = state.customers.find(c => String(c.id) === val);
+  if (customer) {
+    $("orderClientName").value = customer.name || "";
+    $("orderClientEmail").value = customer.email || "";
+    $("orderClientPhone").value = customer.phone || "";
   }
 }
+
+function showOrderReceipt(order) {
+  const items = order.client_order_items || [];
+  $("receiptContent").innerHTML = `
+    <div class="receipt-hero">
+      <span class="receipt-success-icon" aria-hidden="true">✓</span>
+      <strong class="receipt-status">ORDER CONFIRMED &amp; STOCK DEDUCTED</strong>
+      <span class="receipt-brand">MATERIALS INVENTORY</span>
+      <strong class="receipt-amount">${money(order.total)}</strong>
+      <span class="receipt-amount-label">Order total</span>
+    </div>
+    <h3>Order receipt</h3>
+    <p class="receipt-reference"><span>Reference number</span><strong>${esc(order.reference_number)}</strong></p>
+    <div class="receipt-meta">
+      <span>Date</span><strong>${esc(dateTime(order.created_at))}</strong>
+      <span>Customer</span><strong>${esc(order.client_name)}</strong>
+      <span>Phone</span><strong>${esc(order.client_phone)}</strong>
+      <span>Email</span><strong>${esc(order.client_email || "None")}</strong>
+      ${state.user?.display_name ? `<span>Encoded by</span><strong>${esc(state.user.display_name)}</strong>` : ""}
+    </div>
+    <div class="receipt-items">${items.map(item => `<div class="receipt-item">
+      <span>${esc(item.item_name)}<small>${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)} × ${money(item.unit_price)}</small></span>
+      <strong>${money(item.line_total)}</strong>
+    </div>`).join("")}</div>
+    ${order.note ? `<p class="receipt-note"><span>Note</span>${esc(order.note)}</p>` : ""}
+    <div class="receipt-total"><span>Total</span><strong>${money(order.total)}</strong></div>
+    <p class="receipt-disclaimer">Stock has been deducted from the main inventory. Order receipt for business records.</p>`;
+  openModal("receiptModal");
+}
+
+// SALES PER DAY
+async function loadSalesSummary() {
+  try {
+    const data = await api("/api/sales-summary");
+    state.salesSummary = data;
+    $("salesTotalRevenue").textContent = money(data.totalSales);
+    $("salesTotalOrders").textContent = Number(data.totalOrders).toLocaleString("en-PH");
+    $("salesTotalItems").textContent = Number(data.totalItemsSold).toLocaleString("en-PH");
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayEntry = (data.daily || []).find(d => d.date === todayStr);
+    $("salesTodayRevenue").textContent = money(todayEntry?.total || 0);
+    $("salesTodayCount").textContent = `${todayEntry?.orders || 0} orders today`;
+
+    const dailyRows = data.daily || [];
+    $("dailySalesBody").innerHTML = dailyRows.length ? dailyRows.map(row => `<tr>
+      <td><strong>${esc(dateOnly(row.date))}</strong> (${esc(row.date)})</td>
+      <td><strong>${Number(row.orders).toLocaleString("en-PH")}</strong> order${row.orders === 1 ? "" : "s"}</td>
+      <td><strong>${Number(row.itemsSold).toLocaleString("en-PH")}</strong> units deducted</td>
+      <td class="price-cell"><strong>${money(row.total)}</strong></td>
+    </tr>`).join("") : `<tr><td colspan="4" class="empty-cell">No sales recorded yet. Client orders will appear here aggregated daily.</td></tr>`;
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("dailySalesBody").innerHTML = `<tr><td colspan="4" class="empty-cell">${esc(error.message)}</td></tr>`;
+  }
+}
+
+// CUSTOMER DATABASE
+async function loadCustomers() {
+  try {
+    const customers = await api("/api/customers");
+    state.customers = customers;
+    renderCustomers();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("customersBody").innerHTML = `<tr><td colspan="7" class="empty-cell">${esc(error.message)}</td></tr>`;
+  }
+}
+
+function renderCustomers() {
+  const search = $("customerSearchInput").value.trim().toLowerCase();
+  const rows = state.customers.filter(c => {
+    const text = [c.name, c.phone, c.email, c.address, c.notes].join(" ").toLowerCase();
+    return !search || text.includes(search);
+  });
+
+  $("customersBody").innerHTML = rows.length ? rows.map(c => `<tr>
+    <td><strong>${esc(c.name)}</strong></td>
+    <td>${esc(c.phone || "—")}</td>
+    <td>${esc(c.email || "—")}</td>
+    <td>${esc(c.address || "—")}</td>
+    <td>${esc(c.notes || "—")}</td>
+    <td>${esc(dateOnly(c.created_at))}</td>
+    <td>
+      <div class="row-actions">
+        <button class="small-action" data-customer-action="edit" data-id="${esc(c.id)}">Edit</button>
+        <button class="small-action" data-customer-action="delete" data-id="${esc(c.id)}">Delete</button>
+      </div>
+    </td>
+  </tr>`).join("") : `<tr><td colspan="7" class="empty-cell">No customers found. Click "＋ Add customer" to encode one.</td></tr>`;
+
+  $("customerCount").textContent = `Showing ${rows.length} of ${state.customers.length} customers in database`;
+}
+
+function openCustomerModal(customer = null) {
+  $("customerForm").reset();
+  $("customerId").value = customer?.id || "";
+  $("custName").value = customer?.name || "";
+  $("custPhone").value = customer?.phone || "";
+  $("custEmail").value = customer?.email || "";
+  $("custAddress").value = customer?.address || "";
+  $("custNotes").value = customer?.notes || "";
+  $("customerError").textContent = "";
+  $("customerModalTitle").textContent = customer ? "Edit customer" : "Add customer";
+  $("saveCustomerBtn").textContent = customer ? "Save changes" : "Encode customer";
+  openModal("customerModal");
+}
+
+// USER MANAGEMENT (Admin Only)
+async function loadUsers() {
+  try {
+    state.users = await api("/api/users");
+    renderUsers();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("usersBody").innerHTML = `<tr><td colspan="7" class="empty-cell">${esc(error.message)}</td></tr>`;
+  }
+}
+
 function renderUsers() {
   const direction = $("userSort").value;
   const rows = [...state.users];
@@ -182,49 +437,19 @@ function renderUsers() {
     rows.sort((a, b) => multiplier * String(a[field] || "").localeCompare(String(b[field] || ""), undefined, { sensitivity: "base" }));
   }
   $("usersBody").innerHTML = rows.length ? rows.map(user => `<tr>
-    <td>${esc(user.username)}</td><td>${esc(user.email || "—")}</td><td>${esc(user.phone_number || "—")}</td>
+    <td><strong>${esc(user.username)}</strong></td>
+    <td>${esc(user.email || "—")}</td>
+    <td>${esc(user.phone_number || "—")}</td>
     <td>${esc(user.display_name)}</td>
-    <td><span class="category-pill">${({ admin: "Administrator", staff: "Staff", customer: "Customer" })[user.role] || esc(user.role)}</span></td>
-    <td>${esc(dateOnly(user.created_at))}</td><td class="user-actions">
+    <td><span class="category-pill">${({ admin: "Super Admin", staff: "Staff" })[user.role] || esc(user.role)}</span></td>
+    <td>${esc(dateOnly(user.created_at))}</td>
+    <td class="user-actions">
       <button class="small-action" data-user-action="edit" data-id="${esc(user.user_id)}">Edit</button>
       ${user.user_id === state.user.user_id ? "" : `<button class="small-action" data-user-action="delete" data-id="${esc(user.user_id)}">Delete</button>`}
     </td>
   </tr>`).join("") : `<tr><td colspan="7" class="empty-cell">No accounts found.</td></tr>`;
 }
-function openModal(id) { $(id).classList.remove("hidden"); }
-function closeModal(id) { $(id).classList.add("hidden"); }
-function closeProfileMenu() {
-  $("profileDropdown").classList.add("hidden");
-  $("profileTrigger").setAttribute("aria-expanded", "false");
-}
-function resetItemForm() {
-  $("itemForm").reset(); $("itemId").value = ""; $("itemQuantity").value = "0"; $("itemPrice").value = "0"; $("itemThreshold").value = "5";
-  $("modalTitle").textContent = "Add material"; $("saveItemBtn").textContent = "Save item"; $("itemError").textContent = "";
-}
-function editItem(item) {
-  resetItemForm();
-  $("modalTitle").textContent = "Edit material"; $("saveItemBtn").textContent = "Save changes"; $("itemId").value = item.id;
-  const map = { itemName: "name", itemCategory: "category", itemBrand: "brand", itemVariant: "variant", itemSku: "sku", itemUnit: "unit", itemQuantity: "quantity", itemPrice: "unit_price", itemThreshold: "low_stock_threshold", itemNotes: "notes" };
-  Object.entries(map).forEach(([id, key]) => $(id).value = item[key] ?? "");
-  openModal("itemModal");
-}
-async function loadTransactions() {
-  try {
-    const rows = await api("/api/transactions");
-    const direction = $("movementDateSort").value === "oldest" ? 1 : -1;
-    rows.sort((a, b) => direction * ((Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0)));
-    $("transactionsBody").innerHTML = rows.length ? rows.map(x => `<tr>
-      <td>${esc(dateTime(x.created_at))}</td>
-      <td><div class="material-name">${esc(x.inventory_items?.name || "Deleted item")}</div><div class="material-meta">${esc(x.inventory_items?.category || "")}</div></td>
-      <td><span class="category-pill">${({ stock_in: "Stock in", stock_out: "Stock out", adjustment: "Adjustment" })[x.type] || esc(x.type)}</span></td>
-      <td>${Number(x.quantity).toLocaleString("en-PH")} ${esc(x.inventory_items?.unit || "")}</td>
-      <td class="quantity-cell">${Number(x.balance_after).toLocaleString("en-PH")}</td><td>${esc(x.note || "—")}</td>
-    </tr>`).join("") : `<tr><td colspan="6" class="empty-cell">No stock movements yet. Record a movement to start the log.</td></tr>`;
-  } catch (error) {
-    if (error.status === 401) return window.location.replace("/login.html");
-    $("transactionsBody").innerHTML = `<tr><td colspan="6" class="empty-cell">${esc(error.message)}</td></tr>`;
-  }
-}
+
 function openAccountModal(user = null) {
   $("accountForm").reset();
   $("accountId").value = user?.user_id || "";
@@ -232,108 +457,147 @@ function openAccountModal(user = null) {
   $("accountEmail").value = user?.email || "";
   $("accountPhoneNumber").value = user?.phone_number || "";
   $("accountDisplayName").value = user?.display_name || "";
-  $("accountRole").value = user ? user.role : "";
+  $("accountRole").value = user ? user.role : "staff";
   $("accountRole").disabled = user?.user_id === state.user.user_id;
   $("accountPassword").value = "";
   $("accountPassword").required = !user;
   $("accountPasswordHint").textContent = user
-    ? "Leave blank to keep the current password; enter at least 8 characters to change it."
+    ? "Leave blank to keep the current password; enter at least 8 characters to change."
     : "At least 8 characters.";
   $("accountModalTitle").textContent = user ? "Edit account" : "Add account";
   $("saveAccountBtn").textContent = user ? "Save changes" : "Create account";
   $("accountError").textContent = "";
   openModal("accountModal");
 }
-async function loadUsers() {
-  try {
-    state.users = await api("/api/users");
-    renderUsers();
-  } catch (error) {
-    if (error.status === 401) return window.location.replace("/login.html");
-    $("usersBody").innerHTML = `<tr><td colspan="7" class="empty-cell">${esc(error.message)}</td></tr>`;
-  }
-}
+
+// ACTIVITY LOGS (Admin Only)
 async function loadActivityLogs() {
   try {
     const logs = await api("/api/admin/activity-logs");
     $("activityBody").innerHTML = logs.length ? logs.map(log => `<tr>
       <td>${esc(dateTime(log.created_at))}</td>
       <td>${esc(log.actor_name)}</td>
-      <td><span class="category-pill">${esc(({ admin: "Administrator", staff: "Staff", customer: "Customer" })[log.actor_role] || log.actor_role)}</span></td>
+      <td><span class="category-pill">${esc(({ admin: "Super Admin", staff: "Staff" })[log.actor_role] || log.actor_role)}</span></td>
       <td>${esc(log.action.replace(/[._]/g, " "))}</td>
       <td>${esc(log.summary)}</td>
     </tr>`).join("") : `<tr><td colspan="5" class="empty-cell">No activity has been recorded yet.</td></tr>`;
   } catch (error) {
-    if (error.status === 401) return window.location.replace("/login.html");
+    if (error.status === 401) return window.location.replace("/");
     $("activityBody").innerHTML = `<tr><td colspan="5" class="empty-cell">${esc(error.message)}</td></tr>`;
   }
 }
-function showOrderReceipt(order) {
-  const items = order.client_order_items || [];
-  $("receiptContent").innerHTML = `
-    <div class="receipt-hero">
-      <span class="receipt-success-icon" aria-hidden="true">✓</span>
-      <strong class="receipt-status">ORDER CONFIRMED</strong>
-      <span class="receipt-brand">MATERIALS INVENTORY</span>
-      <strong class="receipt-amount">${money(order.total)}</strong>
-      <span class="receipt-amount-label">Order total</span>
-      <span class="receipt-payment-status">Payment not processed</span>
-    </div>
-    <h3>Order receipt</h3>
-    <p class="receipt-reference"><span>Reference number</span><strong>${esc(order.reference_number)}</strong></p>
-    <div class="receipt-meta">
-      <span>Date</span><strong>${esc(dateTime(order.created_at))}</strong>
-      <span>Customer</span><strong>${esc(order.client_name)}</strong>
-      <span>Email</span><strong>${esc(order.client_email)}</strong>
-      <span>Phone</span><strong>${esc(order.client_phone)}</strong>
-      ${state.user?.display_name ? `<span>Recorded by</span><strong>${esc(state.user.display_name)}</strong>` : ""}
-    </div>
-    <div class="receipt-items">${items.map(item => `<div class="receipt-item">
-      <span>${esc(item.item_name)}<small>${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)} × ${money(item.unit_price)}</small></span>
-      <strong>${money(item.line_total)}</strong>
-    </div>`).join("")}</div>
-    ${order.note ? `<p class="receipt-note"><span>Note</span>${esc(order.note)}</p>` : ""}
-    <div class="receipt-total"><span>Total</span><strong>${money(order.total)}</strong></div>
-    <p class="receipt-disclaimer">Order receipt for your records. This is not a tax invoice.</p>`;
-  openModal("receiptModal");
+
+// UI HELPERS
+function openModal(id) { $(id).classList.remove("hidden"); }
+function closeModal(id) { $(id).classList.add("hidden"); }
+function closeProfileMenu() {
+  $("profileDropdown").classList.add("hidden");
+  $("profileTrigger").setAttribute("aria-expanded", "false");
 }
+
 function showApp(user) {
   state.user = user;
   $("appShell").classList.remove("hidden");
-  $("headerDisplayName").textContent = user.display_name;
+  $("headerDisplayName").textContent = `${user.display_name} (${user.role === "admin" ? "Super Admin" : "Staff"})`;
   const initials = user.display_name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("");
   $("profileAvatar").textContent = initials.toUpperCase() || user.username.slice(0, 2).toUpperCase();
-  $("usersNavLink").classList.toggle("hidden", user.role !== "admin");
-  $("activityNavLink").classList.toggle("hidden", user.role !== "admin");
-  $("accountRole").querySelector('option[value="admin"]').disabled = user.role !== "admin";
+
+  const isAdmin = user.role === "admin";
+  $("usersNavLink").classList.toggle("hidden", !isAdmin);
+  $("activityNavLink").classList.toggle("hidden", !isAdmin);
+
+  // Admin controls inventory editing; staff encodes orders and customers
+  $("addItemBtn").classList.toggle("hidden", !isAdmin);
+  $("newMovementBtn").classList.toggle("hidden", !isAdmin);
+
   setView("inventory");
   loadAll();
 }
+
 function setView(view) {
   if (["users", "activity"].includes(view) && state.user?.role !== "admin") view = "inventory";
   state.view = view;
   document.querySelectorAll(".nav-link").forEach(b => b.classList.toggle("active", b.dataset.view === view));
-  const viewName = { inventory: "Inventory", transactions: "Stock movements", orders: "Client orders", users: "User management", activity: "Activity logs" }[view];
-  $("crumbCurrent").textContent = viewName;
-  $("pageTitle").textContent = viewName;
-  $("pageSubtitle").textContent = view === "inventory" ? "Track materials, stock levels, and current prices." : view === "users" ? "Manage accounts for your inventory workspace." : view === "orders" ? "Record client purchases and review saved order history." : view === "activity" ? "Review successful changes made by customers, staff, and administrators." : "A clear record of every stock-in, stock-out, and adjustment.";
-  $("addItemBtn").classList.toggle("hidden", view !== "inventory");
+
+  const isAdmin = state.user?.role === "admin";
+
+  const viewMeta = {
+    inventory: {
+      title: "Inventory",
+      eyebrow: "MATERIALS MANAGEMENT",
+      subtitle: isAdmin ? "Track materials, stock levels, and edit inventory." : "Review materials and current stock levels (view-only for staff)."
+    },
+    transactions: {
+      title: "Stock movements & deductions",
+      eyebrow: "STOCK CONTROL",
+      subtitle: "Track inventory additions, deductions from client orders, and manual adjustments."
+    },
+    orders: {
+      title: "Client orders",
+      eyebrow: "ORDER ENCODING",
+      subtitle: "Encode and review client orders. Items ordered automatically deduct from inventory stock."
+    },
+    sales: {
+      title: "Sales per day",
+      eyebrow: "REVENUE & PERFORMANCE",
+      subtitle: "Track daily sales volume, items deducted, and revenue totals."
+    },
+    customers: {
+      title: "Customer database",
+      eyebrow: "CUSTOMER DIRECTORY",
+      subtitle: "Encode customer database, contact details, and site delivery information."
+    },
+    users: {
+      title: "User management",
+      eyebrow: "ADMINISTRATION",
+      subtitle: "Create and manage staff and administrator accounts."
+    },
+    activity: {
+      title: "Activity logs",
+      eyebrow: "AUDIT TRAIL",
+      subtitle: "Detailed audit trail of changes made across inventory, orders, and customer database."
+    }
+  }[view];
+
+  $("crumbCurrent").textContent = viewMeta.title;
+  $("pageTitle").textContent = viewMeta.title;
+  $("pageEyebrow").textContent = viewMeta.eyebrow;
+  $("pageSubtitle").textContent = viewMeta.subtitle;
+
+  // Toggle heading action buttons
+  $("addItemBtn").classList.toggle("hidden", view !== "inventory" || !isAdmin);
+  $("pageNewOrderBtn").classList.toggle("hidden", view !== "orders");
+  $("pageAddCustomerBtn").classList.toggle("hidden", view !== "customers");
+
+  // Toggle stat cards
   $("statsGrid").classList.toggle("hidden", view !== "inventory");
+  $("salesStatsGrid").classList.toggle("hidden", view !== "sales");
+
+  // Toggle main panels
   $("inventoryPanel").classList.toggle("hidden", view !== "inventory");
   $("transactionsPanel").classList.toggle("hidden", view !== "transactions");
   $("ordersPanel").classList.toggle("hidden", view !== "orders");
+  $("salesPanel").classList.toggle("hidden", view !== "sales");
+  $("customersPanel").classList.toggle("hidden", view !== "customers");
   $("usersPanel").classList.toggle("hidden", view !== "users");
   $("activityPanel").classList.toggle("hidden", view !== "activity");
+
+  if (view === "inventory") renderItems();
   if (view === "transactions") loadTransactions();
   if (view === "orders") loadOrders();
+  if (view === "sales") loadSalesSummary();
+  if (view === "customers") loadCustomers();
   if (view === "users") loadUsers();
   if (view === "activity") loadActivityLogs();
 }
+
+// EVENT LISTENERS
 $("profileTrigger").addEventListener("click", () => {
   const isOpen = !$("profileDropdown").classList.contains("hidden");
   $("profileDropdown").classList.toggle("hidden", isOpen);
   $("profileTrigger").setAttribute("aria-expanded", String(!isOpen));
 });
+
 $("editProfileBtn").addEventListener("click", () => {
   closeProfileMenu();
   $("profileForm").reset();
@@ -344,9 +608,11 @@ $("editProfileBtn").addEventListener("click", () => {
   $("profileError").textContent = "";
   openModal("profileModal");
 });
-$("profilePhoneNumber").addEventListener("input", event => {
-  event.target.value = event.target.value.replace(/\D/g, "").slice(0, 11);
+
+$("profilePhoneNumber").addEventListener("input", e => {
+  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 11);
 });
+
 $("profileForm").addEventListener("submit", async event => {
   event.preventDefault();
   $("profileError").textContent = "";
@@ -363,23 +629,22 @@ $("profileForm").addEventListener("submit", async event => {
       })
     });
     state.user = result.user;
-    $("headerDisplayName").textContent = result.user.display_name;
-    const initials = result.user.display_name.trim().split(/\s+/).filter(Boolean).slice(0, 2)
-      .map(part => part[0]).join("");
-    $("profileAvatar").textContent = initials.toUpperCase() || result.user.username.slice(0, 2).toUpperCase();
+    $("headerDisplayName").textContent = `${result.user.display_name} (${result.user.role === "admin" ? "Super Admin" : "Staff"})`;
     closeModal("profileModal");
     toast("Profile updated.");
   } catch (error) {
-    if (error.status === 401) return window.location.replace("/login.html");
+    if (error.status === 401) return window.location.replace("/");
     $("profileError").textContent = error.message;
   } finally {
     button.disabled = false;
   }
 });
+
 $("logoutBtn").addEventListener("click", () => {
   closeProfileMenu();
   openModal("logoutModal");
 });
+
 $("confirmLogoutBtn").addEventListener("click", async () => {
   const button = $("confirmLogoutBtn");
   button.disabled = true;
@@ -392,12 +657,14 @@ $("confirmLogoutBtn").addEventListener("click", async () => {
     button.disabled = false;
   }
 });
+
 $("changePasswordBtn").addEventListener("click", () => {
   closeProfileMenu();
   $("changePasswordForm").reset();
   $("changePasswordError").textContent = "";
   openModal("changePasswordModal");
 });
+
 $("changePasswordForm").addEventListener("submit", async event => {
   event.preventDefault();
   $("changePasswordError").textContent = "";
@@ -418,17 +685,321 @@ $("changePasswordForm").addEventListener("submit", async event => {
     });
     window.location.replace("/?password_changed=1");
   } catch (error) {
-    if (error.status === 401) return window.location.replace("/login.html");
+    if (error.status === 401) return window.location.replace("/");
     $("changePasswordError").textContent = error.message;
   } finally {
     button.disabled = false;
   }
 });
+
+// Inventory events
+$("addItemBtn").addEventListener("click", () => { resetItemForm(); openModal("itemModal"); });
+$("refreshBtn").addEventListener("click", loadAll);
+$("searchInput").addEventListener("input", renderItems);
+$("categoryFilter").addEventListener("change", renderItems);
+$("stockFilter").addEventListener("change", renderItems);
+$("inventoryDateSort").addEventListener("change", renderItems);
+
+$("inventoryBody").addEventListener("click", async e => {
+  const button = e.target.closest("button[data-action]");
+  if (!button) return;
+  const item = state.items.find(x => String(x.id) === button.dataset.id);
+  if (!item) return;
+
+  if (button.dataset.action === "edit") return editItem(item);
+  if (button.dataset.action === "move") {
+    $("movementSearch").value = "";
+    renderMovementOptions();
+    $("movementItem").value = item.id;
+    $("movementError").textContent = "";
+    openModal("movementModal");
+    return;
+  }
+  if (button.dataset.action === "delete") {
+    state.itemToDelete = item;
+    $("deleteItemName").textContent = item.name;
+    openModal("deleteModal");
+  }
+});
+
+$("confirmDeleteBtn").addEventListener("click", async () => {
+  const item = state.itemToDelete;
+  if (!item) return;
+  const button = $("confirmDeleteBtn");
+  button.disabled = true;
+  try {
+    await api(`/api/items/${item.id}`, { method: "DELETE" });
+    state.itemToDelete = null;
+    closeModal("deleteModal");
+    toast("Item deleted.");
+    await loadAll();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("deleteModal").addEventListener("click", e => {
+  if (e.target.closest("[data-close='deleteModal']")) state.itemToDelete = null;
+});
+
+$("itemForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("itemError").textContent = "";
+  const id = $("itemId").value;
+  const payload = {
+    name: $("itemName").value,
+    category: $("itemCategory").value,
+    brand: $("itemBrand").value,
+    variant: $("itemVariant").value,
+    sku: $("itemSku").value,
+    unit: $("itemUnit").value,
+    quantity: $("itemQuantity").value,
+    unit_price: $("itemPrice").value,
+    low_stock_threshold: $("itemThreshold").value,
+    notes: $("itemNotes").value
+  };
+  try {
+    await api(id ? `/api/items/${id}` : "/api/items", { method: id ? "PATCH" : "POST", body: JSON.stringify(payload) });
+    closeModal("itemModal");
+    toast(id ? "Item updated." : "Item added to inventory.");
+    await loadAll();
+  } catch (error) {
+    $("itemError").textContent = error.message;
+  }
+});
+
+// Stock Movements & Deductions events
+$("newMovementBtn").addEventListener("click", () => {
+  $("movementForm").reset();
+  $("movementSearch").value = "";
+  renderMovementOptions();
+  $("movementError").textContent = "";
+  openModal("movementModal");
+});
+
+$("movementSearch").addEventListener("input", renderMovementOptions);
+$("movementDateSort").addEventListener("change", renderTransactions);
+$("movementTypeFilter").addEventListener("change", renderTransactions);
+
+$("movementForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("movementError").textContent = "";
+  try {
+    await api("/api/transactions", {
+      method: "POST",
+      body: JSON.stringify({
+        item_id: $("movementItem").value,
+        type: $("movementType").value,
+        quantity: $("movementQuantity").value,
+        note: $("movementNote").value
+      })
+    });
+    closeModal("movementModal");
+    toast("Stock movement recorded.");
+    await loadAll();
+  } catch (error) {
+    $("movementError").textContent = error.message;
+  }
+});
+
+// Order Events
+$("newOrderBtn").addEventListener("click", openOrderModal);
+$("pageNewOrderBtn").addEventListener("click", openOrderModal);
+$("orderClientSelect").addEventListener("change", onOrderClientSelected);
+$("orderClientPhone").addEventListener("input", e => {
+  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 11);
+});
+
+$("addOrderLineBtn").addEventListener("click", () => {
+  state.orderLines.push({ id: state.nextOrderLineId++, itemId: "", quantity: "1" });
+  renderOrderLines();
+});
+
+$("orderLines").addEventListener("change", event => {
+  const row = event.target.closest("[data-order-line]");
+  if (!row) return;
+  const line = state.orderLines.find(item => String(item.id) === row.dataset.orderLine);
+  if (!line) return;
+  if (event.target.matches("[data-order-item]")) {
+    line.itemId = event.target.value;
+    renderOrderLines();
+  } else if (event.target.matches("[data-order-quantity]")) {
+    line.quantity = event.target.value;
+    updateOrderTotal();
+  }
+});
+
+$("orderLines").addEventListener("input", event => {
+  if (!event.target.matches("[data-order-quantity]")) return;
+  const row = event.target.closest("[data-order-line]");
+  const line = state.orderLines.find(item => String(item.id) === row?.dataset.orderLine);
+  if (!line) return;
+  line.quantity = event.target.value;
+  updateOrderTotal();
+});
+
+$("orderLines").addEventListener("click", event => {
+  if (!event.target.closest("[data-order-remove]")) return;
+  const row = event.target.closest("[data-order-line]");
+  state.orderLines = state.orderLines.filter(line => String(line.id) !== row?.dataset.orderLine);
+  renderOrderLines();
+});
+
+$("orderForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  $("orderError").textContent = "";
+  if (!state.orderLines.length || state.orderLines.some(line => !line.itemId || !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0)) {
+    $("orderError").textContent = "Choose a material and enter a quantity greater than zero for every order line.";
+    return;
+  }
+  $("orderConfirmClient").textContent = $("orderClientName").value.trim();
+  $("orderConfirmItems").textContent = `${state.orderLines.length} item type${state.orderLines.length === 1 ? "" : "s"}`;
+  $("orderConfirmTotal").textContent = $("orderTotal").textContent;
+  openModal("orderConfirmModal");
+});
+
+$("confirmOrderBtn").addEventListener("click", async () => {
+  closeModal("orderConfirmModal");
+  const button = $("saveOrderBtn");
+  button.disabled = true;
+  try {
+    const order = await api("/api/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        client_name: $("orderClientName").value,
+        client_email: $("orderClientEmail").value,
+        client_phone: $("orderClientPhone").value,
+        note: $("orderNote").value,
+        items: state.orderLines.map(line => ({ item_id: line.itemId, quantity: line.quantity }))
+      })
+    });
+    closeModal("orderModal");
+    showOrderReceipt(order);
+    toast("Order placed and stock deducted.");
+    await loadAll();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("orderError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("exportOrdersBtn").addEventListener("click", async () => {
+  const button = $("exportOrdersBtn");
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/orders/export");
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) return window.location.replace("/");
+      throw new Error(data.error || `Export failed (${response.status})`);
+    }
+    const file = await response.blob();
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `orders-sales-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast("Orders and sales exported to Excel.");
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// Sales per day events
+$("refreshSalesBtn").addEventListener("click", loadSalesSummary);
+
+// Customer database events
+$("addCustomerBtn").addEventListener("click", () => openCustomerModal());
+$("pageAddCustomerBtn").addEventListener("click", () => openCustomerModal());
+$("refreshCustomersBtn").addEventListener("click", loadCustomers);
+$("customerSearchInput").addEventListener("input", renderCustomers);
+
+$("custPhone").addEventListener("input", e => {
+  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 11);
+});
+
+$("customerForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("customerError").textContent = "";
+  const id = $("customerId").value;
+  const button = $("saveCustomerBtn");
+  button.disabled = true;
+  try {
+    await api(id ? `/api/customers/${encodeURIComponent(id)}` : "/api/customers", {
+      method: id ? "PATCH" : "POST",
+      body: JSON.stringify({
+        name: $("custName").value,
+        phone: $("custPhone").value,
+        email: $("custEmail").value,
+        address: $("custAddress").value,
+        notes: $("custNotes").value
+      })
+    });
+    closeModal("customerModal");
+    toast(id ? "Customer details updated." : "Customer encoded into database.");
+    await loadCustomers();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("customerError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("customersBody").addEventListener("click", e => {
+  const button = e.target.closest("button[data-customer-action]");
+  if (!button) return;
+  const customer = state.customers.find(c => String(c.id) === button.dataset.id);
+  if (!customer) return;
+
+  if (button.dataset.customerAction === "edit") {
+    openCustomerModal(customer);
+  } else if (button.dataset.customerAction === "delete") {
+    state.customerToDelete = customer;
+    $("deleteCustomerName").textContent = customer.name;
+    openModal("customerDeleteModal");
+  }
+});
+
+$("confirmCustomerDeleteBtn").addEventListener("click", async () => {
+  const customer = state.customerToDelete;
+  if (!customer) return;
+  const button = $("confirmCustomerDeleteBtn");
+  button.disabled = true;
+  try {
+    await api(`/api/customers/${encodeURIComponent(customer.id)}`, { method: "DELETE" });
+    state.customerToDelete = null;
+    closeModal("customerDeleteModal");
+    toast("Customer removed from database.");
+    await loadCustomers();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("customerDeleteModal").addEventListener("click", e => {
+  if (e.target.closest("[data-close='customerDeleteModal']")) state.customerToDelete = null;
+});
+
+// User Management Events (Admin)
 $("addAccountBtn").addEventListener("click", () => openAccountModal());
 $("userSort").addEventListener("change", renderUsers);
-$("accountPhoneNumber").addEventListener("input", event => {
-  event.target.value = event.target.value.replace(/\D/g, "").slice(0, 11);
+$("accountPhoneNumber").addEventListener("input", e => {
+  e.target.value = e.target.value.replace(/\D/g, "").slice(0, 11);
 });
+
 $("accountForm").addEventListener("submit", async event => {
   event.preventDefault();
   $("accountError").textContent = "";
@@ -451,38 +1022,13 @@ $("accountForm").addEventListener("submit", async event => {
     toast(id ? "Account updated." : "Account created.");
     await loadUsers();
   } catch (error) {
-    if (error.status === 401) return window.location.replace("/login.html");
+    if (error.status === 401) return window.location.replace("/");
     $("accountError").textContent = error.message;
   } finally {
     button.disabled = false;
   }
 });
-$("exportOrdersBtn").addEventListener("click", async () => {
-  const button = $("exportOrdersBtn");
-  button.disabled = true;
-  try {
-    const response = await fetch("/api/orders/export");
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      if (response.status === 401) return window.location.replace("/login.html");
-      throw new Error(data.error || `Export failed (${response.status})`);
-    }
-    const file = await response.blob();
-    const url = URL.createObjectURL(file);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `orders-sales-${new Date().toISOString().slice(0, 10)}.xlsx`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    toast("Orders and sales exported.");
-  } catch (error) {
-    toast(error.message);
-  } finally {
-    button.disabled = false;
-  }
-});
+
 $("usersBody").addEventListener("click", event => {
   const button = event.target.closest("button[data-user-action]");
   if (!button) return;
@@ -498,6 +1044,7 @@ $("usersBody").addEventListener("click", event => {
     openModal("accountDeleteModal");
   }
 });
+
 $("confirmAccountDeleteBtn").addEventListener("click", async () => {
   const user = state.userToDelete;
   if (!user) return;
@@ -510,99 +1057,21 @@ $("confirmAccountDeleteBtn").addEventListener("click", async () => {
     toast("Account deleted.");
     await loadUsers();
   } catch (error) {
-    if (error.status === 401) return window.location.replace("/login.html");
+    if (error.status === 401) return window.location.replace("/");
     toast(error.message);
   } finally {
     button.disabled = false;
   }
 });
+
 $("accountDeleteModal").addEventListener("click", event => {
   if (event.target.closest("[data-close='accountDeleteModal']")) state.userToDelete = null;
 });
-$("addItemBtn").addEventListener("click", () => { resetItemForm(); openModal("itemModal"); });
-$("refreshBtn").addEventListener("click", loadAll);
-$("searchInput").addEventListener("input", renderItems);
-$("categoryFilter").addEventListener("change", renderItems);
-$("stockFilter").addEventListener("change", renderItems);
-$("inventoryDateSort").addEventListener("change", renderItems);
-$("movementDateSort").addEventListener("change", loadTransactions);
-$("movementSearch").addEventListener("input", renderMovementOptions);
-$("newOrderBtn").addEventListener("click", openOrderModal);
-$("orderClientSelect").addEventListener("change", setSelectedOrderClient);
-$("orderClientPhone").addEventListener("input", event => {
-  event.target.value = event.target.value.replace(/\D/g, "").slice(0, 11);
-});
-$("addOrderLineBtn").addEventListener("click", () => {
-  state.orderLines.push({ id: state.nextOrderLineId++, itemId: "", quantity: "1" });
-  renderOrderLines();
-});
-$("orderLines").addEventListener("change", event => {
-  const row = event.target.closest("[data-order-line]");
-  if (!row) return;
-  const line = state.orderLines.find(item => String(item.id) === row.dataset.orderLine);
-  if (!line) return;
-  if (event.target.matches("[data-order-item]")) {
-    line.itemId = event.target.value;
-    renderOrderLines();
-  } else if (event.target.matches("[data-order-quantity]")) {
-    line.quantity = event.target.value;
-    updateOrderTotal();
-  }
-});
-$("orderLines").addEventListener("input", event => {
-  if (!event.target.matches("[data-order-quantity]")) return;
-  const row = event.target.closest("[data-order-line]");
-  const line = state.orderLines.find(item => String(item.id) === row?.dataset.orderLine);
-  if (!line) return;
-  line.quantity = event.target.value;
-  updateOrderTotal();
-});
-$("orderLines").addEventListener("click", event => {
-  if (!event.target.closest("[data-order-remove]")) return;
-  const row = event.target.closest("[data-order-line]");
-  state.orderLines = state.orderLines.filter(line => String(line.id) !== row?.dataset.orderLine);
-  renderOrderLines();
-});
-$("orderForm").addEventListener("submit", async event => {
-  event.preventDefault();
-  $("orderError").textContent = "";
-  if (!state.orderLines.length || state.orderLines.some(line => !line.itemId || !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0)) {
-    $("orderError").textContent = "Choose a material and enter a quantity greater than zero for every order line.";
-    return;
-  }
-  $("orderConfirmClient").textContent = $("orderClientName").value.trim();
-  $("orderConfirmItems").textContent = `${state.orderLines.length} item${state.orderLines.length === 1 ? "" : "s"}`;
-  $("orderConfirmTotal").textContent = $("orderTotal").textContent;
-  openModal("orderConfirmModal");
-});
-$("confirmOrderBtn").addEventListener("click", async () => {
-  closeModal("orderConfirmModal");
-  const button = $("saveOrderBtn");
-  button.disabled = true;
-  try {
-    const order = await api("/api/orders", {
-      method: "POST",
-      body: JSON.stringify({
-        client_name: $("orderClientName").value,
-        client_email: $("orderClientEmail").value,
-        client_phone: $("orderClientPhone").value,
-        note: $("orderNote").value,
-        items: state.orderLines.map(line => ({ item_id: line.itemId, quantity: line.quantity }))
-      })
-    });
-    closeModal("orderModal");
-    showOrderReceipt(order);
-    toast("Client order saved and recorded.");
-    await loadAll();
-  } catch (error) {
-    if (error.status === 401) return window.location.replace("/login.html");
-    $("orderError").textContent = error.message;
-  } finally {
-    button.disabled = false;
-  }
-});
-document.querySelectorAll(".nav-link").forEach(b => b.addEventListener("click", () => { setView(b.dataset.view); $("sidebar").classList.remove("open"); }));
+
+// Activity logs
 $("refreshActivityBtn").addEventListener("click", loadActivityLogs);
+
+// Receipt print
 $("printReceiptBtn").addEventListener("click", () => {
   $("receiptModal").classList.add("receipt-print-target");
   document.body.classList.add("receipt-printing");
@@ -612,101 +1081,31 @@ $("printReceiptBtn").addEventListener("click", () => {
     $("receiptModal").classList.remove("receipt-print-target");
   }, 1000);
 });
-document.addEventListener("click", event => {
-  if (!window.matchMedia("(max-width: 720px)").matches) return;
-  const sidebar = $("sidebar");
-  if (!sidebar.classList.contains("open")
-    || sidebar.contains(event.target)
-    || $("menuToggle").contains(event.target)) return;
-  sidebar.classList.remove("open");
-  $("menuToggle").setAttribute("aria-expanded", "false");
-  $("menuToggle").setAttribute("aria-label", "Open navigation");
-});
+
+// Navigation & Generic modals
+document.querySelectorAll(".nav-link").forEach(b => b.addEventListener("click", () => {
+  setView(b.dataset.view);
+  $("sidebar").classList.remove("open");
+}));
+
 document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => closeModal(b.dataset.close)));
 document.querySelectorAll(".modal-backdrop").forEach(m => m.addEventListener("click", e => {
-  if (e.target === m && m.id !== "deleteModal") closeModal(m.id);
+  if (e.target === m && m.id !== "deleteModal" && m.id !== "customerDeleteModal" && m.id !== "accountDeleteModal") closeModal(m.id);
 }));
+
 document.addEventListener("click", event => {
   if (!event.target.closest("#profileMenu")) closeProfileMenu();
 });
+
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
     closeProfileMenu();
     state.itemToDelete = null;
+    state.customerToDelete = null;
     document.querySelectorAll(".modal-backdrop").forEach(m => closeModal(m.id));
   }
 });
-$("inventoryBody").addEventListener("click", async e => {
-  const button = e.target.closest("button[data-action]"); if (!button) return;
-  const item = state.items.find(x => String(x.id) === button.dataset.id); if (!item) return;
-  if (button.dataset.action === "edit") return editItem(item);
-  if (button.dataset.action === "move") {
-    $("movementSearch").value = "";
-    renderMovementOptions();
-    $("movementItem").value = item.id;
-    $("movementError").textContent = "";
-    openModal("movementModal");
-    return;
-  }
-  if (button.dataset.action === "delete") {
-    state.itemToDelete = item;
-    $("deleteItemName").textContent = item.name;
-    openModal("deleteModal");
-  }
-});
-$("confirmDeleteBtn").addEventListener("click", async () => {
-  const item = state.itemToDelete;
-  if (!item) return;
-  const button = $("confirmDeleteBtn");
-  button.disabled = true;
-  try {
-    await api(`/api/items/${item.id}`, { method: "DELETE" });
-    state.itemToDelete = null;
-    closeModal("deleteModal");
-    toast("Item deleted.");
-    await loadAll();
-  } catch (error) {
-    toast(error.message);
-  } finally {
-    button.disabled = false;
-  }
-});
-$("deleteModal").addEventListener("click", e => {
-  if (e.target.closest("[data-close='deleteModal']")) state.itemToDelete = null;
-});
-$("itemForm").addEventListener("submit", async e => {
-  e.preventDefault(); $("itemError").textContent = "";
-  const id = $("itemId").value;
-  const payload = {
-    name: $("itemName").value, category: $("itemCategory").value, brand: $("itemBrand").value,
-    variant: $("itemVariant").value, sku: $("itemSku").value, unit: $("itemUnit").value,
-    quantity: $("itemQuantity").value, unit_price: $("itemPrice").value,
-    low_stock_threshold: $("itemThreshold").value, notes: $("itemNotes").value
-  };
-  try {
-    await api(id ? `/api/items/${id}` : "/api/items", { method: id ? "PATCH" : "POST", body: JSON.stringify(payload) });
-    closeModal("itemModal"); toast(id ? "Item updated." : "Item added."); await loadAll();
-  } catch (error) { $("itemError").textContent = error.message; }
-});
-$("newMovementBtn").addEventListener("click", () => {
-  $("movementForm").reset();
-  $("movementSearch").value = "";
-  renderMovementOptions();
-  $("movementError").textContent = "";
-  openModal("movementModal");
-});
-$("movementForm").addEventListener("submit", async e => {
-  e.preventDefault(); $("movementError").textContent = "";
-  try {
-    await api("/api/transactions", {
-      method: "POST", body: JSON.stringify({
-        item_id: $("movementItem").value, type: $("movementType").value,
-        quantity: $("movementQuantity").value, note: $("movementNote").value
-      })
-    });
-    closeModal("movementModal"); toast("Stock movement recorded."); await loadAll();
-  } catch (error) { $("movementError").textContent = error.message; }
-});
+
 $("menuToggle").addEventListener("click", () => {
   const isMobile = window.matchMedia("(max-width: 720px)").matches;
   const sidebar = $("sidebar");
@@ -714,10 +1113,9 @@ $("menuToggle").addEventListener("click", () => {
     ? sidebar.classList.toggle("open")
     : $("appShell").classList.toggle("sidebar-collapsed");
   $("menuToggle").setAttribute("aria-expanded", String(isMobile ? isOpen : !isOpen));
-  $("menuToggle").setAttribute("aria-label", isMobile
-    ? (isOpen ? "Close navigation" : "Open navigation")
-    : (isOpen ? "Show sidebar" : "Hide sidebar"));
 });
+
+// Init
 api("/api/auth/me")
   .then(result => {
     showApp(result.user);
@@ -728,6 +1126,6 @@ api("/api/auth/me")
     }
   })
   .catch(error => {
-    if (error.status === 401) return window.location.replace("/login.html");
+    if (error.status === 401) return window.location.replace("/");
     $("connectionText").textContent = error.message;
   });

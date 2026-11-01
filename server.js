@@ -40,7 +40,7 @@ function validUsername(username) {
   return /^[a-z0-9][a-z0-9._-]{2,31}$/.test(username);
 }
 function unauthenticated(req, res, message) {
-  if (req.path === "/dashboard.html" || req.path === "/customer.html") return res.redirect("/");
+  if (req.path === "/dashboard.html") return res.redirect("/");
   return res.status(401).json({ error: message });
 }
 function getCookie(req, name) {
@@ -123,12 +123,12 @@ async function requireAuth(req, res, next) {
 }
 function staffRequired(req, res, next) {
   if (["admin", "staff"].includes(req.user?.role)) return next();
-  if (req.path === "/dashboard.html") return res.redirect("/customer.html");
-  return res.status(403).json({ error: "A staff account is required." });
+  if (req.path === "/dashboard.html") return res.redirect("/");
+  return res.status(403).json({ error: "A valid staff or administrator account is required." });
 }
 function adminRequired(req, res, next) {
   if (req.user?.role === "admin") return next();
-  return res.status(403).json({ error: "An administrator account is required." });
+  return res.status(403).json({ error: "Only administrators are allowed to perform this action." });
 }
 async function recordActivity(req, res, activity, actor = req.user) {
   const { error } = await supabase.from("admin_activity_logs").insert({
@@ -143,53 +143,20 @@ async function recordActivity(req, res, activity, actor = req.user) {
   if (error) {
     console.error("Failed to save admin activity log:", error);
     res.status(500).json({
-      error: "The change was saved, but its activity log could not be saved. Do not retry this action; contact the administrator."
+      error: "The change was saved, but its activity log could not be saved."
     });
     return false;
   }
   return true;
 }
-function customerRequired(req, res, next) {
-  if (req.user?.role !== "customer") {
-    if (req.path === "/customer.html") return res.redirect("/dashboard.html");
-    return res.status(403).json({ error: "A customer account is required to place orders." });
-  }
-  next();
-}
-const publicOrderAttempts = new Map();
-const publicOrderWindowMs = 15 * 60 * 1000;
-function limitPublicOrderSubmissions(req, res, next) {
-  const now = Date.now();
-  const key = `${req.path}:${req.ip || req.socket.remoteAddress || "unknown"}`;
-  const attempts = publicOrderAttempts.get(key);
-  if (attempts && attempts.resetAt > now && attempts.count >= 10) {
-    return res.status(429).json({ error: "Too many requests from this connection. Please try again later." });
-  }
-  if (publicOrderAttempts.size >= 10000 && !attempts) {
-    for (const [address, window] of publicOrderAttempts) {
-      if (window.resetAt <= now) publicOrderAttempts.delete(address);
-    }
-    if (publicOrderAttempts.size >= 10000) {
-      publicOrderAttempts.delete(publicOrderAttempts.keys().next().value);
-    }
-  }
-  publicOrderAttempts.set(key, attempts && attempts.resetAt > now
-    ? { count: attempts.count + 1, resetAt: attempts.resetAt }
-    : { count: 1, resetAt: now + publicOrderWindowMs });
-  next();
-}
+
 app.get("/dashboard.html", requireAuth, staffRequired, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "dashboard.html"));
-});
-app.get("/customer.html", requireAuth, customerRequired, (req, res) => {
-  res.set("Cache-Control", "private, no-store");
-  res.sendFile(path.join(__dirname, "protected", "customer.html"));
 });
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
-app.get(["/admin", "/login.html"], (req, res) => res.redirect("/"));
-app.get("/order.html", (req, res) => res.redirect("/customer.html"));
+app.get(["/admin", "/login.html", "/customer.html", "/customer", "/customers", "/order.html", "/order"], (req, res) => res.redirect("/dashboard.html"));
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/api/health", (req, res) => res.json({ ok: true, supabaseConfigured: configured }));
@@ -223,60 +190,6 @@ app.post("/api/auth/login", dbRequired, async (req, res) => {
   res.json({ user });
 });
 
-app.post("/api/auth/register", dbRequired, limitPublicOrderSubmissions, async (req, res) => {
-  const username = normalizeUsername(req.body?.username);
-  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
-  const phoneNumber = typeof req.body?.phone_number === "string" ? req.body.phone_number.trim() : "";
-  const displayName = typeof req.body?.display_name === "string" ? req.body.display_name.trim() : "";
-  const password = typeof req.body?.password === "string" ? req.body.password : "";
-  const confirmPassword = typeof req.body?.confirm_password === "string" ? req.body.confirm_password : "";
-  if (!validUsername(username)) {
-    return res.status(400).json({ error: "Username must be 3-32 characters: letters, numbers, periods, underscores, or hyphens." });
-  }
-  if (!displayName || displayName.length > 120) {
-    return res.status(400).json({ error: "Name is required and must be 120 characters or fewer." });
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
-    return res.status(400).json({ error: "Enter a valid email address (254 characters or fewer)." });
-  }
-  if (!/^[0-9]{11}$/.test(phoneNumber)) {
-    return res.status(400).json({ error: "Phone number must contain exactly 11 digits." });
-  }
-  if (password !== confirmPassword) return res.status(400).json({ error: "Passwords do not match." });
-  if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
-
-  const { data, error } = await supabase.rpc("register_customer", {
-    p_username: username,
-    p_email: email,
-    p_phone_number: phoneNumber,
-    p_display_name: displayName,
-    p_password: password
-  });
-  if (error) {
-    if (error.code === "23505") return res.status(409).json({ error: "That username is already in use." });
-    if (error.code === "P0001" && error.message.startsWith("That email address")) {
-      return res.status(409).json({ error: error.message });
-    }
-    if (error.code === "P0001") return res.status(400).json({ error: error.message });
-    return fail(res, error);
-  }
-  const user = data?.[0];
-  if (!user) return fail(res, new Error("Customer account registration did not return an account."));
-  const { data: account, error: accountError } = await supabase.from("accounts")
-    .select("password_hash").eq("user_id", user.user_id).maybeSingle();
-  if (accountError) return fail(res, accountError);
-  if (!account?.password_hash) return fail(res, new Error("Registered customer has no password hash."));
-  const registeredUser = { ...user, role: normalizeRole(user.role) };
-  if (!await recordActivity(req, res, {
-    action: "account.registered",
-    entityType: "account",
-    entityId: user.user_id,
-    summary: `Customer account registered: ${user.username}.`
-  }, registeredUser)) return;
-  setSessionCookie(res, createSessionToken(user.user_id, account.password_hash));
-  res.status(201).json({ user });
-});
-
 app.post("/api/auth/logout", requireAuth, async (req, res) => {
   if (!await recordActivity(req, res, {
     action: "account.signed_out",
@@ -289,11 +202,11 @@ app.post("/api/auth/logout", requireAuth, async (req, res) => {
 });
 
 app.use("/api", (req, res, next) => {
-  if (["/health", "/auth/login", "/auth/register", "/auth/logout"].includes(req.path)) return next();
+  if (["/health", "/auth/login", "/auth/logout"].includes(req.path)) return next();
   requireAuth(req, res, next);
 });
 
-app.use(["/api/items", "/api/summary", "/api/transactions", "/api/orders", "/api/order-clients"], staffRequired);
+app.use(["/api/items", "/api/summary", "/api/transactions", "/api/orders", "/api/customers", "/api/sales-summary"], staffRequired);
 
 app.get("/api/auth/me", (req, res) => res.json({ user: req.user }));
 
@@ -417,15 +330,6 @@ app.delete("/api/users/:id", adminRequired, async (req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/order-clients", async (req, res) => {
-  const { data, error } = await supabase.from("accounts")
-    .select("user_id,email,phone_number,display_name")
-    .eq("role", "customer")
-    .order("display_name");
-  if (error) return fail(res, error);
-  res.json(data);
-});
-
 async function saveAccount(req, res, userId = null) {
   const username = normalizeUsername(req.body?.username);
   const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
@@ -445,8 +349,8 @@ async function saveAccount(req, res, userId = null) {
   if (!/^[0-9]{11}$/.test(phoneNumber)) {
     return res.status(400).json({ error: "Phone number must contain exactly 11 digits." });
   }
-  if (!["admin", "staff", "customer"].includes(role)) {
-    return res.status(400).json({ error: "Choose Staff, Administrator, or Customer for this account." });
+  if (!["admin", "staff"].includes(role)) {
+    return res.status(400).json({ error: "Choose Staff or Administrator for this account." });
   }
   if ((userId === null || password) && password.length < 8) {
     return res.status(400).json({ error: "Password must be at least 8 characters." });
@@ -463,18 +367,6 @@ async function saveAccount(req, res, userId = null) {
     p_user_id: userId
   };
   let { data, error } = await supabase.rpc("save_app_user", saveArguments);
-  const hasLegacyStaffRoleRules = candidate =>
-    (candidate?.code === "P0001" && /valid account role/i.test(candidate.message || ""))
-    || (candidate?.code === "23514" && candidate.constraint === "accounts_role_check");
-  if (role === "staff" && hasLegacyStaffRoleRules(error)) {
-    console.warn("Database role function is outdated; saving staff with its legacy role. Apply supabase/schema.sql to migrate.");
-    ({ data, error } = await supabase.rpc("save_app_user", { ...saveArguments, p_role: "user" }));
-    if (hasLegacyStaffRoleRules(error)) {
-      return res.status(503).json({
-        error: "The database still rejects staff accounts. Run the latest supabase/schema.sql in the Supabase SQL Editor, then restart the app."
-      });
-    }
-  }
   if (error) {
     if (error.code === "23505") return res.status(409).json({ error: "That username is already in use." });
     if (error.code === "P0001" && error.message.startsWith("That email address")) {
@@ -499,6 +391,7 @@ async function saveAccount(req, res, userId = null) {
   res.status(userId ? 200 : 201).json({ ...user, role: normalizeRole(user.role) });
 }
 
+// INVENTORY ITEMS
 app.get("/api/items", async (req, res) => {
   let query = supabase.from("inventory_items").select("*").order("category").order("name");
   if (req.query.search) query = query.or(`name.ilike.%${req.query.search}%,brand.ilike.%${req.query.search}%,sku.ilike.%${req.query.search}%`);
@@ -520,7 +413,8 @@ app.get("/api/summary", async (req, res) => {
   });
 });
 
-app.post("/api/items", async (req, res) => {
+// Admin only: create, update, delete inventory items
+app.post("/api/items", adminRequired, async (req, res) => {
   const { name, category, brand = "", variant = "", unit = "piece", quantity = 0, unit_price = 0, low_stock_threshold = 5, sku = "", notes = "" } = req.body || {};
   if (!name?.trim() || !category?.trim()) return res.status(400).json({ error: "Item name and category are required." });
   const payload = {
@@ -542,7 +436,7 @@ app.post("/api/items", async (req, res) => {
   res.status(201).json(data);
 });
 
-app.patch("/api/items/:id", async (req, res) => {
+app.patch("/api/items/:id", adminRequired, async (req, res) => {
   const allowed = ["name", "category", "brand", "variant", "unit", "quantity", "unit_price", "low_stock_threshold", "sku", "notes"];
   const payload = {};
   for (const key of allowed) if (req.body[key] !== undefined) payload[key] = req.body[key];
@@ -565,7 +459,7 @@ app.patch("/api/items/:id", async (req, res) => {
   res.json(data);
 });
 
-app.delete("/api/items/:id", async (req, res) => {
+app.delete("/api/items/:id", adminRequired, async (req, res) => {
   const { data: item, error: readError } = await supabase.from("inventory_items")
     .select("id,name").eq("id", req.params.id).maybeSingle();
   if (readError) return fail(res, readError);
@@ -581,7 +475,46 @@ app.delete("/api/items/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/api/transactions", async (req, res) => {
+// Admin only: Quick Add Stock (e.g. Advance cement has 100, add 50 new arrived bags -> 150)
+app.post("/api/items/:id/add-stock", adminRequired, async (req, res) => {
+  const amount = Number(req.body?.added_quantity);
+  const note = String(req.body?.note || "").trim();
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ error: "Enter a valid quantity to add (must be greater than 0)." });
+  }
+
+  const { data: item, error: readError } = await supabase.from("inventory_items").select("*").eq("id", req.params.id).maybeSingle();
+  if (readError) return fail(res, readError);
+  if (!item) return res.status(404).json({ error: "Inventory item not found." });
+
+  const currentQuantity = Number(item.quantity || 0);
+  const nextQuantity = currentQuantity + amount;
+
+  const { data: updated, error: updateError } = await supabase.from("inventory_items")
+    .update({ quantity: nextQuantity, updated_at: new Date().toISOString() }).eq("id", item.id).select().single();
+  if (updateError) return fail(res, updateError);
+
+  const txNote = note ? `New stock arrived: ${note}` : `Arrived stock added: +${amount} ${item.unit}`;
+  await supabase.from("inventory_transactions")
+    .insert({ item_id: item.id, type: "stock_in", quantity: amount, note: txNote, balance_after: nextQuantity });
+
+  await recordActivity(req, res, {
+    action: "inventory.stock_added",
+    entityType: "inventory_item",
+    entityId: item.id,
+    summary: `Stock added to ${item.name}: +${amount} ${item.unit} (Previous: ${currentQuantity}, New Total: ${nextQuantity}).`
+  });
+
+  res.status(200).json({
+    item: updated,
+    added: amount,
+    previous_quantity: currentQuantity,
+    new_quantity: nextQuantity
+  });
+});
+
+// Admin only: manual stock movement
+app.post("/api/transactions", adminRequired, async (req, res) => {
   const { item_id, type, quantity, note = "" } = req.body || {};
   const amount = Number(quantity);
   if (!item_id || !["stock_in", "stock_out", "adjustment"].includes(type) || !Number.isFinite(amount) || amount <= 0) {
@@ -604,7 +537,6 @@ app.post("/api/transactions", async (req, res) => {
       entityId: item_id,
       summary: `${type.replace("_", " ")} ${amount} ${item.unit} of ${item.name}; resulting stock ${nextQuantity}. Movement record failed.`
     })) return;
-    // Keep the item update visible; tell the operator the stock changed but its log did not save.
     return res.status(500).json({ error: `Stock changed to ${nextQuantity}, but transaction log failed: ${txError.message}` });
   }
   if (!await recordActivity(req, res, {
@@ -616,18 +548,149 @@ app.post("/api/transactions", async (req, res) => {
   res.status(201).json({ item: updated, transaction });
 });
 
+// View transactions (stock deductions / stock movements)
 app.get("/api/transactions", async (req, res) => {
   const { data, error } = await supabase.from("inventory_transactions")
     .select("id,item_id,type,quantity,note,balance_after,created_at,inventory_items(name,category,brand,variant,unit)")
-    .order("created_at", { ascending: false }).limit(100);
+    .order("created_at", { ascending: false }).limit(200);
   if (error) return fail(res, error);
   res.json(data);
 });
 
-async function saveClientOrder(req, res, userId, isCustomer = false) {
-  const clientName = isCustomer ? req.user.display_name : typeof req.body?.client_name === "string" ? req.body.client_name.trim() : "";
-  const clientEmail = isCustomer ? req.user.email : typeof req.body?.client_email === "string" ? req.body.client_email.trim() : "";
-  const clientPhone = isCustomer ? req.user.phone_number : typeof req.body?.client_phone === "string" ? req.body.client_phone.trim() : "";
+// CUSTOMER DATABASE (Staff can add, edit, delete, view; Admin can view)
+// Includes complete purchase history, items bought, and date of purchase
+app.get(["/api/customers", "/api/order-clients"], async (req, res) => {
+  const { data: customers, error } = await supabase.from("customers")
+    .select("*").order("name");
+  if (error) {
+    console.warn("Could not query customers table:", error.message);
+    return res.json([]);
+  }
+
+  // Load all client orders with items to attach purchase history to each customer
+  const { data: allOrders } = await supabase.from("client_orders")
+    .select("id,receipt_number,created_at,client_name,client_email,client_phone,note,total,client_order_items(item_name,unit,quantity,unit_price,line_total)")
+    .order("created_at", { ascending: false });
+
+  const ordersList = allOrders || [];
+
+  const enhancedCustomers = (customers || []).map(cust => {
+    // Match orders by phone or name
+    const custPhone = cust.phone ? String(cust.phone).trim() : "";
+    const custName = String(cust.name || "").trim().toLowerCase();
+
+    const matchedOrders = ordersList.filter(o => {
+      const oPhone = o.client_phone ? String(o.client_phone).trim() : "";
+      const oName = String(o.client_name || "").trim().toLowerCase();
+      return (custPhone && oPhone === custPhone) || (oName === custName);
+    });
+
+    let totalPurchases = 0;
+    const allItemsBought = [];
+
+    matchedOrders.forEach(o => {
+      totalPurchases += Number(o.total || 0);
+      (o.client_order_items || []).forEach(it => {
+        allItemsBought.push(`${it.item_name} (${Number(it.quantity).toLocaleString("en-PH")} ${it.unit})`);
+      });
+    });
+
+    const uniqueItemsSummary = [...new Set(allItemsBought)].slice(0, 5).join(", ") + (allItemsBought.length > 5 ? "..." : "");
+
+    return {
+      ...cust,
+      orders_count: matchedOrders.length,
+      total_purchases: totalPurchases,
+      last_purchase_date: matchedOrders[0]?.created_at || null,
+      purchased_items_summary: uniqueItemsSummary || "No purchases recorded yet",
+      purchases: matchedOrders.map(o => ({
+        id: o.id,
+        receipt_number: `OR-${String(o.receipt_number).padStart(8, "0")}`,
+        date: o.created_at,
+        total: o.total,
+        note: o.note,
+        items: o.client_order_items || []
+      }))
+    };
+  });
+
+  res.json(enhancedCustomers);
+});
+
+app.post("/api/customers", async (req, res) => {
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+  const address = typeof req.body?.address === "string" ? req.body.address.trim() : "";
+  const notes = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
+  if (!name || name.length > 120) return res.status(400).json({ error: "Customer name is required (120 characters max)." });
+  if (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)) {
+    return res.status(400).json({ error: "Enter a valid email address." });
+  }
+  if (phone && !/^[0-9]{11}$/.test(phone)) {
+    return res.status(400).json({ error: "Phone number must contain exactly 11 digits." });
+  }
+  const { data, error } = await supabase.from("customers")
+    .insert({ name, email, phone, address, notes, created_by: req.user.user_id })
+    .select().single();
+  if (error) return fail(res, error);
+  if (!await recordActivity(req, res, {
+    action: "customer.created",
+    entityType: "customer",
+    entityId: data.id,
+    summary: `Customer encoded: ${data.name}.`
+  })) return;
+  res.status(201).json(data);
+});
+
+app.patch("/api/customers/:id", async (req, res) => {
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+  const address = typeof req.body?.address === "string" ? req.body.address.trim() : "";
+  const notes = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
+  if (!name || name.length > 120) return res.status(400).json({ error: "Customer name is required (120 characters max)." });
+  if (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)) {
+    return res.status(400).json({ error: "Enter a valid email address." });
+  }
+  if (phone && !/^[0-9]{11}$/.test(phone)) {
+    return res.status(400).json({ error: "Phone number must contain exactly 11 digits." });
+  }
+  const { data, error } = await supabase.from("customers")
+    .update({ name, email, phone, address, notes, updated_at: new Date().toISOString() })
+    .eq("id", req.params.id).select().single();
+  if (error) return fail(res, error);
+  if (!data) return res.status(404).json({ error: "Customer not found." });
+  if (!await recordActivity(req, res, {
+    action: "customer.updated",
+    entityType: "customer",
+    entityId: data.id,
+    summary: `Customer updated: ${data.name}.`
+  })) return;
+  res.json(data);
+});
+
+app.delete("/api/customers/:id", async (req, res) => {
+  const { data: customer, error: readError } = await supabase.from("customers")
+    .select("id,name").eq("id", req.params.id).maybeSingle();
+  if (readError) return fail(res, readError);
+  if (!customer) return res.status(404).json({ error: "Customer not found." });
+  const { error } = await supabase.from("customers").delete().eq("id", req.params.id);
+  if (error) return fail(res, error);
+  if (!await recordActivity(req, res, {
+    action: "customer.deleted",
+    entityType: "customer",
+    entityId: customer.id,
+    summary: `Customer deleted: ${customer.name}.`
+  })) return;
+  res.json({ ok: true });
+});
+
+// CLIENT ORDERS
+async function saveClientOrder(req, res, userId) {
+  const clientName = typeof req.body?.client_name === "string" ? req.body.client_name.trim() : "";
+  const clientEmail = typeof req.body?.client_email === "string" ? req.body.client_email.trim() : "";
+  const clientPhone = typeof req.body?.client_phone === "string" ? req.body.client_phone.trim() : "";
   const note = typeof req.body?.note === "string" ? req.body.note.trim() : "";
   const items = req.body?.items;
   if (!clientName || clientName.length > 120) {
@@ -680,36 +743,87 @@ async function saveClientOrder(req, res, userId, isCustomer = false) {
   if (orderReadError) {
     console.error("Order was saved and logged, but the receipt details could not be loaded:", orderReadError);
     return res.status(500).json({
-      error: `Order ${orderId} was saved, but its receipt could not be loaded. Do not submit it again; contact the administrator.`
+      error: `Order ${orderId} was saved, but its receipt could not be loaded.`
     });
   }
   const receiptNumber = Number(savedOrder.receipt_number);
-  if (!Number.isSafeInteger(receiptNumber) || receiptNumber < 1) {
-    console.error("Order was saved, but its receipt number is invalid. Apply the latest supabase/schema.sql.");
-    return res.status(503).json({
-      error: `Order ${orderId} was saved, but its receipt reference is unavailable. Do not submit it again; apply the latest supabase/schema.sql and contact the administrator.`
-    });
-  }
   const referenceNumber = `OR-${String(receiptNumber).padStart(8, "0")}`;
+
+  // Automatically sync or record customer in customer database with their address
+  const clientAddress = typeof req.body?.client_address === "string" ? req.body.client_address.trim() : "";
+  try {
+    const { data: existingCust } = await supabase.from("customers")
+      .select("id,address").or(`phone.eq.${clientPhone},name.ilike.${clientName}`).limit(1).maybeSingle();
+
+    if (existingCust) {
+      if (clientAddress && !existingCust.address) {
+        await supabase.from("customers").update({ address: clientAddress, updated_at: new Date().toISOString() }).eq("id", existingCust.id);
+      }
+    } else {
+      await supabase.from("customers").insert({
+        name: clientName,
+        phone: clientPhone,
+        email: clientEmail,
+        address: clientAddress,
+        notes: `Customer from order ${referenceNumber}`,
+        created_by: userId
+      });
+    }
+  } catch (custSyncErr) {
+    console.warn("Customer sync warning:", custSyncErr.message);
+  }
+
   if (!await recordActivity(req, res, {
     action: "order.placed",
     entityType: "client_order",
     entityId: orderId,
-    summary: `${isCustomer ? "Customer" : "Staff"} order ${referenceNumber} recorded with ${quantities.size} item type${quantities.size === 1 ? "" : "s"}.`
+    summary: `Order ${referenceNumber} recorded for ${clientName} (${quantities.size} item${quantities.size === 1 ? "" : "s"}).`
   })) return;
   res.status(201).json({ ...savedOrder, reference_number: referenceNumber });
 }
 
-app.get("/api/customer/items", customerRequired, async (req, res) => {
-  const { data, error } = await supabase.from("inventory_items")
-    .select("id,name,category,brand,variant,unit,quantity,unit_price")
-    .gt("quantity", 0).order("category").order("name");
+app.post("/api/orders", (req, res) => saveClientOrder(req, res, req.user.user_id));
+
+app.get("/api/orders", async (req, res) => {
+  const { data, error } = await supabase.from("client_orders")
+    .select("id,receipt_number,client_name,client_email,client_phone,note,total,order_channel,created_at,ordered_by_account:accounts!client_orders_ordered_by_fkey(display_name),client_order_items(item_name,unit,quantity,unit_price,line_total)")
+    .order("created_at", { ascending: false }).limit(200);
   if (error) return fail(res, error);
   res.json(data);
 });
 
-app.post("/api/customer/orders", customerRequired, limitPublicOrderSubmissions, (req, res) => saveClientOrder(req, res, req.user.user_id, true));
-app.post("/api/orders", (req, res) => saveClientOrder(req, res, req.user.user_id));
+// SALES PER DAY
+app.get("/api/sales-summary", async (req, res) => {
+  const { data, error } = await supabase.from("client_orders")
+    .select("id,receipt_number,total,created_at,client_name,client_order_items(quantity,line_total)")
+    .order("created_at", { ascending: false });
+  if (error) return fail(res, error);
+  const salesByDay = new Map();
+  let totalSales = 0;
+  let totalOrders = (data || []).length;
+  let totalItemsSold = 0;
+
+  for (const order of data || []) {
+    const day = new Date(order.created_at).toISOString().slice(0, 10);
+    const amount = Number(order.total || 0);
+    const itemsCount = (order.client_order_items || []).reduce((acc, it) => acc + Number(it.quantity || 0), 0);
+    totalItemsSold += itemsCount;
+
+    const entry = salesByDay.get(day) || { date: day, orders: 0, total: 0, itemsSold: 0 };
+    entry.orders += 1;
+    entry.total += amount;
+    entry.itemsSold += itemsCount;
+    salesByDay.set(day, entry);
+    totalSales += amount;
+  }
+
+  res.json({
+    totalSales,
+    totalOrders,
+    totalItemsSold,
+    daily: [...salesByDay.values()].sort((a, b) => b.date.localeCompare(a.date))
+  });
+});
 
 app.get("/api/orders/export", async (req, res) => {
   const exportedOrders = [];
@@ -736,7 +850,6 @@ app.get("/api/orders/export", async (req, res) => {
     { header: "Customer", key: "customer", width: 26 },
     { header: "Email", key: "email", width: 32 },
     { header: "Phone", key: "phone", width: 16 },
-    { header: "Order channel", key: "channel", width: 18 },
     { header: "Recorded by", key: "recordedBy", width: 24 },
     { header: "Items", key: "items", width: 52 },
     { header: "Note", key: "note", width: 36 },
@@ -757,10 +870,7 @@ app.get("/api/orders/export", async (req, res) => {
       customer: order.client_name,
       email: order.client_email,
       phone: order.client_phone,
-      channel: order.order_channel === "online" ? "Customer website" : "Staff",
-      recordedBy: order.order_channel === "online"
-        ? "Customer website"
-        : order.ordered_by_account?.display_name || "Former account",
+      recordedBy: order.ordered_by_account?.display_name || "Former account",
       items,
       note: order.note,
       total
@@ -776,11 +886,11 @@ app.get("/api/orders/export", async (req, res) => {
 
   ordersSheet.getColumn("date").numFmt = "yyyy-mm-dd hh:mm";
   ordersSheet.getColumn("total").numFmt = '"₱"#,##0.00';
-  ordersSheet.autoFilter = { from: "A1", to: "K1" };
+  ordersSheet.autoFilter = { from: "A1", to: "J1" };
   ordersSheet.views = [{ state: "frozen", ySplit: 1 }];
 
   const salesSheet = workbook.addWorksheet("Sales Summary");
-  salesSheet.addRow(["Sales report"]);
+  salesSheet.addRow(["Daily Sales Report"]);
   salesSheet.addRow(["Total sales", totalSales]);
   salesSheet.addRow(["Number of orders", exportedOrders.length]);
   salesSheet.addRow([]);
@@ -807,17 +917,10 @@ app.get("/api/orders/export", async (req, res) => {
   res.send(Buffer.from(file));
 });
 
-app.get("/api/orders", async (req, res) => {
-  const { data, error } = await supabase.from("client_orders")
-    .select("id,receipt_number,client_name,client_email,client_phone,note,total,order_channel,created_at,ordered_by_account:accounts!client_orders_ordered_by_fkey(display_name),client_order_items(item_name,unit,quantity,unit_price,line_total)")
-    .order("created_at", { ascending: false }).limit(100);
-  if (error) return fail(res, error);
-  res.json(data);
-});
-
 app.get("/{*path}", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
+
 if (require.main === module) {
   app.listen(port, () => console.log(`Materials Inventory running at http://localhost:${port}`));
 }
