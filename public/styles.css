@@ -1154,6 +1154,7 @@ h1 {
     justify-content: space-between;
     align-items: flex-start;
     gap: 12px;
+    padding: 0 21px;
     margin-bottom: 12px
 }
 
@@ -2505,6 +2506,11 @@ body.dark .table-footer {
 
     .panel-header {
         padding: 17px 14px
+    }
+
+    .monthly-board-heading {
+        padding-right: 14px;
+        padding-left: 14px
     }
 
     #appShell .sidebar:not(.open) {
