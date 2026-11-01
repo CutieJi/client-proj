@@ -1265,6 +1265,7 @@ function showApp(user) {
   const isAdmin = user.role === "admin";
   $("usersNavLink").classList.toggle("hidden", !isAdmin);
   $("activityNavLink").classList.toggle("hidden", !isAdmin);
+  $("manageNavGroup").classList.toggle("hidden", !isAdmin);
   const currentYear = new Date().getFullYear();
   $("summaryYear").innerHTML = Array.from({ length: 7 }, (_, index) => currentYear + 2 - index)
     .map(year => `<option value="${year}">${year}</option>`).join("");
