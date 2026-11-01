@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Materials Inventory Dashboard</title>
+  <title>JIJ Construction Dashboard</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 
@@ -13,13 +13,18 @@
     <aside class="sidebar" id="sidebar">
       <a class="brand" href="#" aria-label="Materials Inventory home">
         <img class="brand-mark brand-logo" src="/logo.png" alt="">
-        <span><strong>Materials</strong><small>INVENTORY</small></span>
+        <span><strong>JIJ Contruction</strong><small>MATERIALS TRADING</small></span>
       </a>
       <div class="nav-label">WORKSPACE</div>
-      <button class="nav-link active" data-view="inventory" aria-label="Masterfile Management">
+      <button class="nav-link active" data-view="dashboard">
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
+          <path d="M1 1h6v6H1zm8 0h6v4H9zM9 7h6v8H9zM1 9h6v6H1z"/>
+        </svg></span> Dashboard
+      </button>
+      <button class="nav-link" data-view="inventory" aria-label="Masterfile Management">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
           <path d="M1 2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1zm7 0a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1zM1 10a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1zm7 0a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1z" />
-        </svg></span> Masterfile Management
+        </svg></span> Masterfile
       </button>
       <button class="nav-link" data-view="inventory-monitoring">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
@@ -51,6 +56,11 @@
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
           <path d="M2 1h12a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1m0 2v10h12V3zm2 2h8v1H4zm0 3h8v1H4zm0 3h5v1H4z" />
         </svg></span> Client orders
+      </button>
+      <button class="nav-link" data-view="sales-transactions">
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
+          <path d="M2 1h12v14H2zm2 2v2h2V3zm3 0v2h5V3zM4 6v2h2V6zm3 0v2h5V6zM4 9v2h2V9zm3 0v2h5V9zm-3 3v1h8v-1z"/>
+        </svg></span> Sales transactions
       </button>
       <button class="nav-link" data-view="sales">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
@@ -98,8 +108,8 @@
         <div class="page-heading">
           <div>
             <p class="eyebrow" id="pageEyebrow">MATERIALS MANAGEMENT</p>
-            <h1 id="pageTitle">Inventory</h1>
-            <p class="subheading" id="pageSubtitle">Track materials, stock levels, and current prices.</p>
+            <h1 id="pageTitle">Dashboard</h1>
+            <p class="subheading" id="pageSubtitle">Masterfile Management summary and inventory overview.</p>
           </div>
           <div class="page-heading-actions">
             <button class="primary-button hidden" id="addItemBtn"><span>＋</span> Add item</button>
@@ -108,8 +118,62 @@
           </div>
         </div>
 
-        <!-- Inventory Stats -->
-        <div class="stats-grid" id="statsGrid">
+        <div class="stats-grid dashboard-stats-grid hidden" id="dashboardStatsGrid">
+          <article class="stat-card"><div class="stat-top"><span>Retail Inventory Amount</span></div><strong id="dashboardRetailAmount">—</strong><small>Current quantity × selling price</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Inventory Quantity</span></div><strong id="dashboardStockUnits">—</strong><small>Current units on hand</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Inventory Cost Value</span></div><strong id="dashboardCostValue">—</strong><small>Current quantity × supplier cost</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Total Sales</span></div><strong id="dashboardSales">—</strong><small>Selected year</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Cost of Good Sold</span></div><strong id="dashboardCogs">—</strong><small>Selected year</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Gross Profit</span></div><strong id="dashboardProfit">—</strong><small>Sales less cost of goods sold</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Cash Purchases</span></div><strong id="dashboardCashPurchases">—</strong><small>Selected year</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Credit Purchases</span></div><strong id="dashboardCreditPurchases">—</strong><small>Selected year</small></article>
+        </div>
+        <section class="panel hidden" id="dashboardPanel">
+          <div class="panel-header">
+            <div>
+              <h2>JIJ Construction Materials Trading</h2>
+              <p>Inventory Management System overview</p>
+            </div>
+            <div class="dashboard-controls">
+              <span class="dashboard-date">DATE <strong id="dashboardDate">—</strong></span>
+              <label class="field dashboard-year-field">Month<select id="dashboardMonth"></select></label>
+              <label class="field dashboard-year-field">Year<select id="dashboardYear"></select></label>
+            </div>
+          </div>
+          <div class="dashboard-content-grid">
+            <section class="dashboard-card">
+              <h3>Monthly Summary</h3>
+              <div id="dashboardMonthlySummary"></div>
+            </section>
+            <section class="dashboard-card">
+              <h3>Monthly Sales Overview</h3>
+              <div class="dashboard-month-chart" id="dashboardMonthChart"></div>
+            </section>
+            <section class="dashboard-card">
+              <h3>Top 3 Months With Highest Sales</h3>
+              <div id="dashboardTopMonths"></div>
+            </section>
+            <section class="dashboard-card">
+              <h3>Top 5 Best Sellers</h3>
+              <div id="dashboardBestSellers"></div>
+            </section>
+            <section class="dashboard-card">
+              <h3>Items Summary Dropdown</h3>
+              <label class="dashboard-category-filter">Item
+                <select id="dashboardItemFilter"><option value="all">Select an item</option></select>
+              </label>
+              <div id="dashboardItemSummary"></div>
+            </section>
+            <section class="dashboard-card">
+              <h3>Current Inventory</h3>
+              <div id="dashboardCurrentInventory"></div>
+            </section>
+          </div>
+          <p class="form-error dashboard-error" id="dashboardError" role="alert"></p>
+        </section>
+
+        <!-- Masterfile Management Summary Cards -->
+        <div class="stats-grid hidden" id="statsGrid">
           <article class="stat-card">
             <div class="stat-top"><span>Inventory Quantity</span></div><strong
               id="beginInventoryUnits">—</strong><small>Begin Inventory total from Masterfile</small>
@@ -123,7 +187,6 @@
               id="beginInventoryCostValue">—</strong><small>Masterfile total</small>
           </article>
         </div>
-
         <!-- Sales Stats -->
         <div class="stats-grid hidden" id="salesStatsGrid">
           <article class="stat-card">
@@ -204,13 +267,13 @@
           <div class="table-footer"><span id="rowCount">—</span><span>Prices in Philippine pesos (₱)</span></div>
         </section>
 
+        <div class="stats-grid monitoring-stats-grid hidden" id="monitoringStatsGrid">
+          <article class="stat-card"><div class="stat-top"><span>Total products</span></div><strong id="monitoringTotalItems">—</strong><small>SKU items from Masterfile</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Current inventory</span></div><strong id="monitoringStockUnits">—</strong><small>Units currently on hand</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Current retail amount</span></div><strong id="monitoringRetailAmount">—</strong><small>Current stock × selling price</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Current cost value</span></div><strong id="monitoringCostValue">—</strong><small>Current stock × supplier cost</small></article>
+        </div>
         <section class="panel hidden" id="inventoryMonitoringPanel">
-          <div class="stats-grid monitoring-stats-grid" id="monitoringStatsGrid">
-            <article class="stat-card"><div class="stat-top"><span>Total products</span></div><strong id="monitoringTotalItems">—</strong><small>SKU items from Masterfile</small></article>
-            <article class="stat-card"><div class="stat-top"><span>Current inventory</span></div><strong id="monitoringStockUnits">—</strong><small>Units currently on hand</small></article>
-            <article class="stat-card"><div class="stat-top"><span>Current retail amount</span></div><strong id="monitoringRetailAmount">—</strong><small>Current stock × selling price</small></article>
-            <article class="stat-card"><div class="stat-top"><span>Current cost value</span></div><strong id="monitoringCostValue">—</strong><small>Current stock × supplier cost</small></article>
-          </div>
           <div class="panel-header">
             <div><h2>Inventory Monitoring</h2><p>Masterfile item details with current stock, purchases, sales, damage, and returns.</p></div>
             <button class="secondary-button" id="refreshInventoryMonitoringBtn" type="button">↻ Refresh</button>
@@ -315,14 +378,54 @@
 
         <section class="panel hidden" id="monthlyPanel">
           <div class="panel-header">
-            <div><h2>Monthly operating summary</h2><p>Purchases, sales, cost of goods sold, profit, returns, and damaged stock.</p></div>
+            <div><h2>ENDING INV AND MONTHLY SUMMARY BOARD</h2><p>Record month-end inventory and review monthly stock movements and business totals.</p></div>
             <label class="field" style="max-width:140px;margin:0">Year<select id="summaryYear"></select></label>
           </div>
-          <div class="table-wrap">
-            <table><thead><tr><th>Month</th><th>Cash purchases</th><th>Credit purchases</th><th>Credit payments</th><th>Sales</th><th>Discounts</th><th>COGS</th><th>Gross profit</th><th>Returns</th><th>Damaged</th></tr></thead>
-              <tbody id="monthlySummaryBody"><tr><td colspan="10" class="empty-cell">Loading monthly summary…</td></tr></tbody></table>
-          </div>
-          <div class="table-pagination" id="pagination-monthly"></div>
+          <section class="monthly-board-section">
+            <div class="monthly-board-heading">
+              <div><h3>Ending Inventory Log</h3><p>Enter the closing date, inventory amount, and quantity for each month.</p></div>
+            </div>
+            <div class="table-wrap monthly-ending-wrap">
+              <table class="monthly-ending-table">
+                <thead><tr><th>Month</th><th>Ending date</th><th>Ending amount</th><th>Ending quantity</th><th>Action</th></tr></thead>
+                <tbody id="monthlyClosingsBody"><tr><td colspan="5" class="empty-cell">Loading ending inventory…</td></tr></tbody>
+              </table>
+            </div>
+            <p class="form-error monthly-board-error" id="monthlyClosingsError" role="alert"></p>
+          </section>
+          <section class="monthly-board-section">
+            <div class="monthly-board-heading">
+              <div><h3>Transaction Monthly Summary</h3><p>Monthly quantities and amounts from recorded purchases, sales, returns, and damage.</p></div>
+            </div>
+            <div class="table-wrap monthly-summary-wrap">
+              <table class="monthly-summary-table">
+                <thead>
+                  <tr>
+                    <th rowspan="2">Month</th>
+                    <th colspan="2">Cash Purchases</th>
+                    <th colspan="2">Credit Purchases</th>
+                    <th colspan="2">Sales</th>
+                    <th colspan="2">Cost of Good Sold</th>
+                    <th colspan="1">Profit</th>
+                    <th colspan="2">Returns</th>
+                    <th colspan="2">Damage</th>
+                  </tr>
+                  <tr>
+                    <th>Quantity</th><th>Amount</th>
+                    <th>Quantity</th><th>Amount</th>
+                    <th>Quantity</th><th>Amount</th>
+                    <th>Quantity</th><th>Amount</th>
+                    <th>Amount</th>
+                    <th>Quantity</th><th>Amount</th>
+                    <th>Quantity</th><th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody id="monthlySummaryBody"><tr><td colspan="14" class="empty-cell">Loading monthly summary…</td></tr></tbody>
+                <tfoot id="monthlySummaryTotals"></tfoot>
+              </table>
+            </div>
+            <p class="form-error monthly-board-error" id="monthlySummaryError" role="alert"></p>
+          </section>
         </section>
 
         <!-- CLIENT ORDERS PANEL -->
@@ -345,6 +448,32 @@
           </div>
           <div class="table-pagination" id="pagination-orders"></div>
           <div class="table-footer"><span>Showing recent orders</span><span>Prices in Philippine pesos (₱)</span></div>
+        </section>
+
+        <div class="toolbar sales-transaction-toolbar hidden" id="salesTransactionsControls">
+          <label class="field">Month<select id="salesTransactionMonth"></select></label>
+          <label class="field">Year<select id="salesTransactionYear"></select></label>
+          <button class="secondary-button" id="refreshSalesTransactionsBtn" type="button">↻ Refresh</button>
+        </div>
+        <div class="stats-grid sales-transaction-stats hidden" id="salesTransactionsStatsGrid">
+          <article class="stat-card"><div class="stat-top"><span>Total Sales (Retail Price)</span></div><strong id="salesTransactionAmount">₱0.00</strong><small>Selected month</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Cost of Good Sold</span></div><strong id="salesTransactionCogs">₱0.00</strong><small>Selected month</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Quantity Sold</span></div><strong id="salesTransactionQty">0</strong><small>Selected month</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Gross Profit</span></div><strong id="salesTransactionProfit">₱0.00</strong><small>Sales less cost of goods sold</small></article>
+        </div>
+
+        <section class="panel hidden" id="salesTransactionsPanel">
+          <div class="panel-header">
+            <div>
+              <h2>Sales Transactions</h2>
+              <p id="salesTransactionsHeading">Monthly sales transactions matching the workbook. Client orders automatically appear here.</p>
+            </div>
+            <button class="primary-button" id="recordSalesTransactionBtn" type="button">＋ Record sales transaction</button>
+          </div>
+          <div class="sales-months-grid" id="salesTransactionsMonths">
+            <p class="empty-cell">Loading sales transactions…</p>
+          </div>
+          <p class="form-error sales-transactions-error" id="salesTransactionsError" role="alert"></p>
         </section>
 
         <!-- SALES PER DAY PANEL -->

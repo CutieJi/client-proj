@@ -207,6 +207,20 @@ create index if not exists inventory_purchase_payments_transaction_idx
   on public.inventory_purchase_payments(transaction_id, created_at desc);
 alter table public.inventory_purchase_payments enable row level security;
 
+create table if not exists public.monthly_inventory_closings (
+  id uuid primary key default gen_random_uuid(),
+  year integer not null check (year between 2000 and 2100),
+  month integer not null check (month between 1 and 12),
+  ending_date date not null,
+  ending_amount numeric(12,2) not null check (ending_amount >= 0),
+  ending_quantity numeric(12,2) not null check (ending_quantity >= 0),
+  updated_by uuid references public.accounts(user_id) on delete set null,
+  updated_at timestamptz not null default now(),
+  unique (year, month),
+  check (extract(year from ending_date) = year and extract(month from ending_date) = month)
+);
+alter table public.monthly_inventory_closings enable row level security;
+
 create table if not exists public.customers (
   id uuid primary key default gen_random_uuid(),
   name text not null,

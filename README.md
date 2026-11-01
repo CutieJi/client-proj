@@ -4,6 +4,10 @@ A modern, minimal inventory app for the handwritten building-material price list
 
 ## Included
 
+- Dashboard page modeled on the workbook's Dashboard tab, with current inventory totals, annual sales/purchases/profit, a selected-month summary, monthly sales overview, top sales months, best sellers, an item-summary selector, and the complete current inventory list. Masterfile beginning-balance cards remain on the Masterfile Management page.
+- Monthly Summary board modeled on the workbook's "ENDING INV AND MONTHLY SUMMARY BOARD," with editable month-end date, amount, and quantity records plus grouped monthly purchase, sales, COGS, profit, returns, and damage totals.
+- Sales Transactions page modeled on the workbook tab, with month/year selectors, the workbook's item-level columns and sales/COGS/quantity/profit totals shown in cards outside the transaction panel, derived from saved client orders and connected to Monthly Summary without duplicate transaction entry.
+- Optional `supabase/october_sales_transactions.sql` import to load the workbook's October 2026 sales rows into the app's order tables without changing inventory quantities.
 - Inventory table matching the Masterfile Management item fields and item-number order, with live quantity linked to Inventory Monitoring
 - Summary cards matching the Masterfile's beginning inventory quantity, retail inventory amount, and inventory cost value; Inventory includes the Masterfile's calculated retail and cost amount columns
 - Inventory page and Add/Edit forms for Masterfile item number, SKU, item details, supplier cost, supplier, brand, other details, selling price, and reorder point; live stock remains linked to Inventory Monitoring
@@ -44,10 +48,11 @@ A modern, minimal inventory app for the handwritten building-material price list
 ## Setup
 
 1. In Supabase, open **SQL Editor** and run `supabase/schema.sql`.
-   If this is an existing installation, rerun the updated schema to add inventory masterfile fields, purchase/payment
-   tracking, damage/return events, order discounts and cost-of-goods fields, customer addresses, and atomic inventory
-   operations, along with the existing account and activity-log migrations. Existing account emails are preserved when
-   present; accounts without an email or phone number must be completed by an administrator before their details are current.
+   If this is an existing installation, rerun the updated schema to add inventory masterfile fields, monthly
+   ending-inventory records, purchase/payment tracking, damage/return events, order discounts and cost-of-goods fields,
+   customer addresses, and atomic inventory operations, along with the existing account and activity-log migrations.
+   Existing account emails are preserved when present; accounts without an email or phone number must be completed by an
+   administrator before their details are current.
 2. Optional: run `supabase/seed.sql` to insert the transcribed price list. The seed starts all quantities at `0` because the photo contains prices, not stock counts.
    The optional `import_excel.js` or `import_excel.py` scripts load masterfile fields from
    `%USERPROFILE%\Downloads\INVENTORY MAIN.xlsx`. Verify the workbook is current before running either script:
@@ -58,6 +63,9 @@ A modern, minimal inventory app for the handwritten building-material price list
    loads current on-hand quantities and historical monitoring totals from Inventory Monitoring, and lets new app
    transactions accumulate on top of that snapshot. Re-run the import only after the workbook includes activity since
    the previous import, because it resets the monitoring baseline timestamp.
+   To optionally load the workbook's October 2026 sales history, run `supabase/october_sales_transactions.sql` after the
+   inventory import. It inserts historical order and line records for Sales Transactions and Monthly Summary, but does
+   not deduct stock. The import is safe to rerun; do not run it if those October sales have already been entered manually.
 3. Copy `.env.example` to `.env`.
 4. In Supabase **Project Settings → API**, copy the Project URL and the **service_role** key into `.env`:
 

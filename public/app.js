@@ -3,17 +3,20 @@ const state = {
   items: [],
   inventoryMonitoring: [],
   inventoryMonitoringTotals: null,
+  dashboardSummary: null,
   transactions: [],
   orders: [],
+  salesTransactions: [],
   customers: [],
   purchases: [],
   losses: [],
   activityLogs: [],
   monthlySummary: [],
+  monthlyClosings: [],
   users: [],
   salesSummary: null,
   user: null,
-  view: "inventory",
+  view: "dashboard",
   toastTimer: null,
   itemToDelete: null,
   customerToDelete: null,
@@ -84,6 +87,7 @@ function renderPage(key) {
     losses: renderLosses,
     monthly: renderMonthlySummary,
     orders: renderOrders,
+    "sales-transactions": renderSalesTransactions,
     sales: renderDailySales,
     customers: renderCustomers,
     "customer-purchases": renderCustomerPurchases,
@@ -105,6 +109,13 @@ function stockStatus(item) {
   return ["In stock", "stock-good"];
 }
 
+function sortMaterialsAlphabetically(items) {
+  return [...items].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+      || (a.variant || "").localeCompare(b.variant || "", undefined, { sensitivity: "base" })
+  );
+}
+
 async function loadAll() {
   try {
     const [items, summary, health] = await Promise.all([api("/api/items"), api("/api/summary"), api("/api/health")]);
@@ -117,11 +128,13 @@ async function loadAll() {
     renderItems();
     renderMovementOptions();
 
+    if (state.view === "dashboard") await loadDashboard();
     if (state.view === "transactions") await loadTransactions();
     if (state.view === "purchases") await loadPurchases();
     if (state.view === "losses") await loadLosses();
     if (state.view === "monthly") await loadMonthlySummary();
     if (state.view === "orders") await loadOrders();
+    if (state.view === "sales-transactions") await loadSalesTransactions();
     if (state.view === "sales") await loadSalesSummary();
     if (state.view === "customers") await loadCustomers();
     if (state.view === "inventory-monitoring") await loadInventoryMonitoring();
@@ -158,11 +171,105 @@ function renderCategories() {
   const cats = [...new Set(state.items.map(x => x.category))].filter(Boolean).sort();
   select.innerHTML = `<option>All categories</option>${cats.map(c => `<option>${esc(c)}</option>`).join("")}`;
   select.value = cats.includes(current) ? current : "All categories";
-  const itemCategories = $("itemCategories");
   const masterfileCategories = [...new Set(state.items.map(item => item.category).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-  itemCategories.innerHTML = [...new Set([...masterfileCategories, "Other"])]
+  $("itemCategories").innerHTML = [...new Set([...masterfileCategories, "Other"])]
     .map(category => `<option value="${esc(category)}"></option>`).join("");
+}
+
+async function loadDashboard() {
+  const year = $("dashboardYear").value || String(new Date().getFullYear());
+  $("dashboardDate").textContent = new Intl.DateTimeFormat("en-PH", { dateStyle: "long" }).format(new Date());
+  $("dashboardError").textContent = "";
+  try {
+    const summary = await api(`/api/management-summary?year=${encodeURIComponent(year)}`);
+    state.dashboardSummary = summary;
+    renderDashboard();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("dashboardError").textContent = error.message;
+  }
+}
+
+function renderDashboard() {
+  const months = state.dashboardSummary?.months || [];
+  const items = state.items;
+  const totalQuantity = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  const retailAmount = items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unit_price || 0), 0);
+  const costValue = items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.supplier_cost || 0), 0);
+  const totals = months.reduce((all, month) => ({
+    sales: all.sales + Number(month.sales || 0),
+    cogs: all.cogs + Number(month.costOfGoodsSold || 0),
+    profit: all.profit + Number(month.grossProfit || 0),
+    cash: all.cash + Number(month.cashPurchases || 0),
+    credit: all.credit + Number(month.creditPurchases || 0)
+  }), { sales: 0, cogs: 0, profit: 0, cash: 0, credit: 0 });
+
+  $("dashboardRetailAmount").textContent = money(retailAmount);
+  $("dashboardStockUnits").textContent = totalQuantity.toLocaleString("en-PH");
+  $("dashboardCostValue").textContent = money(costValue);
+  $("dashboardSales").textContent = money(totals.sales);
+  $("dashboardCogs").textContent = money(totals.cogs);
+  $("dashboardProfit").textContent = money(totals.profit);
+  $("dashboardCashPurchases").textContent = money(totals.cash);
+  $("dashboardCreditPurchases").textContent = money(totals.credit);
+
+  const monthNames = Array.from({ length: 12 }, (_, index) =>
+    new Intl.DateTimeFormat("en", { month: "short", timeZone: "UTC" }).format(new Date(Date.UTC(2020, index, 1))));
+  const selectedMonth = Number($("dashboardMonth").value) || new Date().getMonth() + 1;
+  const monthSummary = months.find(month => Number(month.month) === selectedMonth) || {};
+  const monthlyRows = [
+    ["Sales", money(monthSummary.sales || 0)],
+    ["Cost of Good Sold", money(monthSummary.costOfGoodsSold || 0)],
+    ["Gross Profit", money(monthSummary.grossProfit || 0)],
+    ["Cash Purchases", money(monthSummary.cashPurchases || 0)],
+    ["Credit Purchases", money(monthSummary.creditPurchases || 0)],
+    ["Credit Payments", money(monthSummary.creditPayments || 0)],
+    ["Items Sold", Number(monthSummary.salesQty || 0).toLocaleString("en-PH")]
+  ];
+  $("dashboardMonthlySummary").innerHTML = monthlyRows.map(([label, value]) =>
+    `<div class="dashboard-summary-row"><span>${label}</span><strong>${value}</strong></div>`).join("");
+
+  const maxSales = Math.max(0, ...months.map(month => Number(month.sales || 0)));
+  $("dashboardMonthChart").innerHTML = months.map(month => {
+    const sales = Number(month.sales || 0);
+    const width = maxSales > 0 ? Math.max(sales > 0 ? 2 : 0, sales / maxSales * 100) : 0;
+    return `<div class="dashboard-month-row"><span>${monthNames[month.month - 1]}</span><div class="dashboard-bar-track"><i style="width:${width}%"></i></div><strong>${money(sales)}</strong></div>`;
+  }).join("");
+
+  const topMonths = [...months].filter(month => Number(month.sales || 0) > 0)
+    .sort((a, b) => Number(b.sales || 0) - Number(a.sales || 0)).slice(0, 3);
+  $("dashboardTopMonths").innerHTML = topMonths.length ? topMonths.map((month, index) =>
+    `<div class="dashboard-rank-row"><span class="dashboard-rank">${index + 1}</span><strong>${monthNames[month.month - 1]}</strong><span>${money(month.sales)}</span></div>`
+  ).join("") : `<p class="dashboard-empty">No monthly sales recorded for ${esc($("dashboardYear").value)}.</p>`;
+
+  const topSellers = state.dashboardSummary?.topSellers || [];
+  $("dashboardBestSellers").innerHTML = topSellers.length
+    ? topSellers.map((item, index) => `<div class="dashboard-rank-row"><span class="dashboard-rank">${index + 1}</span><strong>${esc(item.name)}</strong><span>${Number(item.quantity).toLocaleString("en-PH")} sold</span></div>`).join("")
+    : `<p class="dashboard-empty">No sales recorded for ${esc($("dashboardYear").value)}.</p>`;
+
+  const itemFilter = $("dashboardItemFilter");
+  const selectedItemId = itemFilter.value || "all";
+  const sortedItems = [...items].sort((a, b) => {
+    const aNumber = Number(a.item_number) || Number.MAX_SAFE_INTEGER;
+    const bNumber = Number(b.item_number) || Number.MAX_SAFE_INTEGER;
+    return aNumber - bNumber || a.name.localeCompare(b.name);
+  });
+  itemFilter.innerHTML = `<option value="all">Select an item</option>${sortMaterialsAlphabetically(items).map(item =>
+    `<option value="${esc(item.id)}">${esc(item.item_number ? `${item.item_number} · ` : "")}${esc(item.name)}</option>`
+  ).join("")}`;
+  itemFilter.value = items.some(item => String(item.id) === selectedItemId) ? selectedItemId : "all";
+  const currentItem = items.find(item => String(item.id) === itemFilter.value);
+  $("dashboardItemSummary").innerHTML = currentItem
+    ? `<div class="dashboard-summary-row"><span>Category / SKU</span><strong>${esc(currentItem.category)} · ${esc(currentItem.sku || "—")}</strong></div>
+       <div class="dashboard-summary-row"><span>Current Quantity</span><strong>${Number(currentItem.quantity || 0).toLocaleString("en-PH")} ${esc(currentItem.unit)}</strong></div>
+       <div class="dashboard-summary-row"><span>Retail Inventory Amount</span><strong>${money(Number(currentItem.quantity || 0) * Number(currentItem.unit_price || 0))}</strong></div>
+       <div class="dashboard-summary-row"><span>Inventory Cost Value</span><strong>${money(Number(currentItem.quantity || 0) * Number(currentItem.supplier_cost || 0))}</strong></div>`
+    : `<p class="dashboard-empty">Choose an item to view its current inventory summary.</p>`;
+  const currentItems = sortedItems;
+  $("dashboardCurrentInventory").innerHTML = currentItems.length
+    ? currentItems.map(item => `<div class="dashboard-inventory-row"><span><strong>${esc(item.name)}</strong><small>${esc(item.category)}</small></span><b>${Number(item.quantity || 0).toLocaleString("en-PH")} ${esc(item.unit)}</b></div>`).join("")
+    : `<p class="dashboard-empty">No inventory items.</p>`;
 }
 
 function renderItems() {
@@ -359,7 +466,7 @@ function renderMovementOptions() {
   const selected = state.items.find(item => String(item.id) === selectedId);
   if (selected && !matches.some(item => item.id === selected.id)) matches.unshift(selected);
   select.innerHTML = `<option value="">${state.items.length ? "Select a material" : "No inventory items available"}</option>` +
-    matches.map(item => `<option value="${esc(item.id)}">${esc(item.name)}${item.brand ? " · " + esc(item.brand) : ""}${item.variant ? " · " + esc(item.variant) : ""} (stock: ${Number(item.quantity)})</option>`).join("");
+    sortMaterialsAlphabetically(matches).map(item => `<option value="${esc(item.id)}">${esc(item.name)}${item.brand ? " · " + esc(item.brand) : ""}${item.variant ? " · " + esc(item.variant) : ""} (stock: ${Number(item.quantity)})</option>`).join("");
   select.value = selectedId;
 }
 
@@ -403,7 +510,7 @@ function renderTransactions() {
 }
 
 function inventoryOptions(selectedId = "") {
-  return `<option value="">Select a material</option>` + state.items.map(item =>
+  return `<option value="">Select a material</option>` + sortMaterialsAlphabetically(state.items).map(item =>
     `<option value="${esc(item.id)}"${String(item.id) === String(selectedId) ? " selected" : ""}>${esc(item.name)}${item.variant ? ` · ${esc(item.variant)}` : ""} (stock: ${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)})</option>`
   ).join("");
 }
@@ -467,33 +574,143 @@ function renderLosses() {
 }
 
 async function loadMonthlySummary() {
+  $("monthlyClosingsError").textContent = "";
+  $("monthlySummaryError").textContent = "";
   try {
     const year = $("summaryYear").value || String(new Date().getFullYear());
-    const result = await api(`/api/management-summary?year=${encodeURIComponent(year)}`);
-    state.monthlySummary = result.months;
+    const [summary, closings] = await Promise.all([
+      api(`/api/management-summary?year=${encodeURIComponent(year)}`),
+      api(`/api/monthly-inventory-closings?year=${encodeURIComponent(year)}`)
+    ]);
+    state.monthlySummary = summary.months;
+    state.monthlyClosings = closings;
     renderMonthlySummary();
   } catch (error) {
     if (error.status === 401) return window.location.replace("/");
-    $("monthlySummaryBody").innerHTML = `<tr><td colspan="10" class="empty-cell">${esc(error.message)}</td></tr>`;
+    $("monthlySummaryError").textContent = error.message;
+    $("monthlySummaryBody").innerHTML = `<tr><td colspan="14" class="empty-cell">${esc(error.message)}</td></tr>`;
+    $("monthlyClosingsBody").innerHTML = `<tr><td colspan="5" class="empty-cell">Unable to load ending inventory records.</td></tr>`;
   }
 }
 
 function renderMonthlySummary() {
-    const resultYear = Number($("summaryYear").value || new Date().getFullYear());
-    const rows = pageRows("monthly", state.monthlySummary);
-    const monthNames = new Intl.DateTimeFormat("en", { month: "long", timeZone: "UTC" });
-    $("monthlySummaryBody").innerHTML = rows.map(entry => `<tr>
-      <td><strong>${monthNames.format(new Date(Date.UTC(resultYear, entry.month - 1, 1)))}</strong></td>
-      <td class="price-cell">${money(entry.cashPurchases)}</td>
-      <td class="price-cell">${money(entry.creditPurchases)}</td>
-      <td class="price-cell">${money(entry.creditPayments)}</td>
-      <td class="price-cell">${money(entry.sales)}</td>
-      <td class="price-cell">${money(entry.discounts)}</td>
-      <td class="price-cell">${money(entry.costOfGoodsSold)}</td>
-      <td class="price-cell">${money(entry.grossProfit)}</td>
-      <td>${Number(entry.returnsQty).toLocaleString("en-PH")} <span class="material-meta">${money(entry.returnsAmount)}</span></td>
-      <td>${Number(entry.damagedQty).toLocaleString("en-PH")} <span class="material-meta">${money(entry.damageAmount)}</span></td>
-    </tr>`).join("");
+  const resultYear = Number($("summaryYear").value || new Date().getFullYear());
+  const months = state.monthlySummary || [];
+  const monthNames = new Intl.DateTimeFormat("en", { month: "long", timeZone: "UTC" });
+  const monthRows = Array.from({ length: 12 }, (_, index) =>
+    months.find(entry => Number(entry.month) === index + 1) || { month: index + 1 });
+  const quantity = value => Number(value || 0).toLocaleString("en-PH");
+  $("monthlySummaryBody").innerHTML = monthRows.map(entry => `<tr>
+    <td><strong>${monthNames.format(new Date(Date.UTC(resultYear, entry.month - 1, 1)))}</strong></td>
+    <td class="quantity-cell">${quantity(entry.cashPurchaseQty)}</td><td class="price-cell">${money(entry.cashPurchases)}</td>
+    <td class="quantity-cell">${quantity(entry.creditPurchaseQty)}</td><td class="price-cell">${money(entry.creditPurchases)}</td>
+    <td class="quantity-cell">${quantity(entry.salesQty)}</td><td class="price-cell">${money(entry.sales)}</td>
+    <td class="quantity-cell">${quantity(entry.salesQty)}</td><td class="price-cell">${money(entry.costOfGoodsSold)}</td>
+    <td class="price-cell">${money(entry.grossProfit)}</td>
+    <td class="quantity-cell">${quantity(entry.returnsQty)}</td><td class="price-cell">${money(entry.returnsAmount)}</td>
+    <td class="quantity-cell">${quantity(entry.damagedQty)}</td><td class="price-cell">${money(entry.damageAmount)}</td>
+  </tr>`).join("");
+
+  const total = monthRows.reduce((totals, entry) => {
+    for (const key of ["cashPurchaseQty", "cashPurchases", "creditPurchaseQty", "creditPurchases",
+      "salesQty", "sales", "costOfGoodsSold", "grossProfit", "returnsQty", "returnsAmount", "damagedQty", "damageAmount"]) {
+      totals[key] += Number(entry[key] || 0);
+    }
+    return totals;
+  }, { cashPurchaseQty: 0, cashPurchases: 0, creditPurchaseQty: 0, creditPurchases: 0, salesQty: 0,
+    sales: 0, costOfGoodsSold: 0, grossProfit: 0, returnsQty: 0, returnsAmount: 0, damagedQty: 0, damageAmount: 0 });
+  $("monthlySummaryTotals").innerHTML = `<tr>
+    <th>Total</th>
+    <th>${quantity(total.cashPurchaseQty)}</th><th>${money(total.cashPurchases)}</th>
+    <th>${quantity(total.creditPurchaseQty)}</th><th>${money(total.creditPurchases)}</th>
+    <th>${quantity(total.salesQty)}</th><th>${money(total.sales)}</th>
+    <th>${quantity(total.salesQty)}</th><th>${money(total.costOfGoodsSold)}</th>
+    <th>${money(total.grossProfit)}</th>
+    <th>${quantity(total.returnsQty)}</th><th>${money(total.returnsAmount)}</th>
+    <th>${quantity(total.damagedQty)}</th><th>${money(total.damageAmount)}</th>
+  </tr>`;
+  renderMonthlyClosings(resultYear, monthNames);
+}
+
+function renderMonthlyClosings(year, monthNames) {
+  const isAdmin = state.user?.role === "admin";
+  const closings = new Map((state.monthlyClosings || []).map(entry => [Number(entry.month), entry]));
+  $("monthlyClosingsBody").innerHTML = Array.from({ length: 12 }, (_, index) => {
+    const month = index + 1;
+    const closing = closings.get(month);
+    const label = monthNames.format(new Date(Date.UTC(year, index, 1)));
+    if (!isAdmin) {
+      return `<tr><td><strong>${label}</strong></td><td>${closing ? esc(closing.ending_date) : "—"}</td>
+        <td class="price-cell">${closing ? money(closing.ending_amount) : "—"}</td>
+        <td class="quantity-cell">${closing ? Number(closing.ending_quantity).toLocaleString("en-PH") : "—"}</td><td>—</td></tr>`;
+    }
+    return `<tr data-closing-month="${month}">
+      <td><strong>${label}</strong></td>
+      <td><input data-closing-date type="date" aria-label="${label} ending date" value="${esc(closing?.ending_date || "")}"></td>
+      <td><input data-closing-amount type="number" min="0" max="9999999999.99" step="0.01" aria-label="${label} ending amount" value="${closing ? esc(closing.ending_amount) : ""}"></td>
+      <td><input data-closing-quantity type="number" min="0" max="9999999999.99" step="0.01" aria-label="${label} ending quantity" value="${closing ? esc(closing.ending_quantity) : ""}"></td>
+      <td class="monthly-closing-actions">
+        <button type="button" class="small-action" data-closing-save>Save</button>
+        ${closing ? `<button type="button" class="small-action" data-closing-clear>Clear</button>` : ""}
+        <span data-closing-status role="status"></span>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+async function saveMonthlyClosing(row, button) {
+  const year = Number($("summaryYear").value);
+  const month = Number(row.dataset.closingMonth);
+  const endingDate = row.querySelector("[data-closing-date]").value;
+  const endingAmount = row.querySelector("[data-closing-amount]").value;
+  const endingQuantity = row.querySelector("[data-closing-quantity]").value;
+  if (!endingDate || endingAmount === "" || endingQuantity === "") {
+    $("monthlyClosingsError").textContent = "Enter the ending date, amount, and quantity before saving.";
+    return;
+  }
+  $("monthlyClosingsError").textContent = "";
+  button.disabled = true;
+  try {
+    const saved = await api("/api/monthly-inventory-closings", {
+      method: "POST",
+      body: JSON.stringify({
+        year,
+        month,
+        ending_date: endingDate,
+        ending_amount: endingAmount,
+        ending_quantity: endingQuantity
+      })
+    });
+    state.monthlyClosings = [
+      ...(state.monthlyClosings || []).filter(entry => Number(entry.month) !== month),
+      saved
+    ];
+    renderMonthlySummary();
+    toast("Ending inventory saved.");
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("monthlyClosingsError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function clearMonthlyClosing(row, button) {
+  const year = Number($("summaryYear").value);
+  const month = Number(row.dataset.closingMonth);
+  $("monthlyClosingsError").textContent = "";
+  button.disabled = true;
+  try {
+    await api(`/api/monthly-inventory-closings/${year}/${month}`, { method: "DELETE" });
+    state.monthlyClosings = (state.monthlyClosings || []).filter(entry => Number(entry.month) !== month);
+    renderMonthlySummary();
+    toast("Ending inventory cleared.");
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("monthlyClosingsError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 // CLIENT ORDERS
@@ -531,7 +748,7 @@ function renderOrderLines() {
   if (!container) return;
   container.innerHTML = state.orderLines.length ? state.orderLines.map(line => {
     const selectedItem = state.items.find(item => String(item.id) === line.itemId);
-    const options = state.items.map(item => `<option value="${esc(item.id)}"${String(item.id) === line.itemId ? " selected" : ""}${Number(item.quantity) <= 0 && String(item.id) !== line.itemId ? " disabled" : ""}>${esc(item.name)}${item.variant ? ` · ${esc(item.variant)}` : ""} (stock: ${Number(item.quantity).toLocaleString("en-PH")})</option>`).join("");
+    const options = sortMaterialsAlphabetically(state.items).map(item => `<option value="${esc(item.id)}"${String(item.id) === line.itemId ? " selected" : ""}${Number(item.quantity) <= 0 && String(item.id) !== line.itemId ? " disabled" : ""}>${esc(item.name)}${item.variant ? ` · ${esc(item.variant)}` : ""} (stock: ${Number(item.quantity).toLocaleString("en-PH")})</option>`).join("");
     const quantityMax = selectedItem ? `max="${Number(selectedItem.quantity)}"` : "";
     return `<div class="order-line" data-order-line="${line.id}">
       <label class="field">Material<select data-order-item required>
@@ -542,6 +759,71 @@ function renderOrderLines() {
     </div>`;
   }).join("") : `<p class="order-lines-empty">Add at least one material to this order.</p>`;
   updateOrderTotal();
+}
+
+async function loadSalesTransactions() {
+  const year = $("salesTransactionYear").value || String(new Date().getFullYear());
+  $("salesTransactionsError").textContent = "";
+  try {
+    const data = await api(`/api/sales-transactions?year=${encodeURIComponent(year)}`);
+    state.salesTransactions = data.months || [];
+    renderSalesTransactions();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    state.salesTransactions = [];
+    renderSalesTransactions();
+    $("salesTransactionsError").textContent = error.message;
+  }
+}
+
+function renderSalesTransactions() {
+  const monthNumber = Number($("salesTransactionMonth").value) || new Date().getMonth() + 1;
+  const month = (state.salesTransactions || []).find(entry => entry.month === monthNumber)
+    || { month: monthNumber, rows: [], summary: {} };
+  const label = new Intl.DateTimeFormat("en", { month: "long", timeZone: "UTC" })
+    .format(new Date(Date.UTC(2020, month.month - 1, 1)));
+  const rows = month.rows || [];
+  const totals = month.summary || {};
+  $("salesTransactionQty").textContent = Number(totals.quantity || 0).toLocaleString("en-PH");
+  $("salesTransactionAmount").textContent = money(totals.retailSales ?? totals.sales);
+  $("salesTransactionCogs").textContent = money(totals.costOfGoodsSold);
+  $("salesTransactionProfit").textContent = money(totals.profit);
+  $("salesTransactionsHeading").textContent = `${label} ${$("salesTransactionYear").value} sales transactions, matching the workbook. Client orders automatically appear here.`;
+  $("salesTransactionsMonths").innerHTML = `<section class="sales-month-section">
+    <header class="sales-month-heading">
+      <div><p>JIJ Constructions · Materials Trading</p><h3>${label} Sales Transaction</h3></div>
+      <span>${esc($("salesTransactionYear").value)}</span>
+    </header>
+    <div class="sales-month-total"><strong>TOTAL SALES AND QUANTITY SOLD</strong><span>${money(totals.sales)}</span><span>${Number(totals.quantity || 0).toLocaleString("en-PH")}</span></div>
+    <div class="table-wrap">
+      <table class="sales-transactions-table">
+        <thead><tr>
+          <th>Product Sku/no#</th><th>Date</th><th>Items</th><th>Category</th><th>Description</th>
+          <th>Supplier Cost</th><th>Selling price</th><th>Customers</th><th>Quantity</th><th>Discount</th>
+          <th>Sales amount</th><th>Cost of Good Sold</th><th>Profit</th>
+        </tr></thead>
+        <tbody id="salesTransactionsBody"></tbody>
+      </table>
+    </div>
+    <div class="table-pagination" id="pagination-sales-transactions"></div>
+  </section>`;
+  const visibleRows = pageRows("sales-transactions", rows);
+  const renderedRows = rows.length ? visibleRows.map(row => `<tr>
+      <td>${esc(row.sku || row.item_number || "—")}</td>
+      <td>${esc(dateOnly(row.date))}</td>
+      <td><strong>${esc(row.item_name)}</strong></td>
+      <td>${esc(row.category || "—")}</td>
+      <td>${esc(row.description || "—")}</td>
+      <td class="price-cell">${money(row.supplier_cost)}</td>
+      <td class="price-cell">${money(row.selling_price)}</td>
+      <td>${esc(row.customer)}</td>
+      <td class="quantity-cell">${Number(row.quantity).toLocaleString("en-PH")} ${esc(row.unit || "")}</td>
+      <td class="price-cell">${money(row.discount)}</td>
+      <td class="price-cell"><strong>${money(row.sales_amount)}</strong></td>
+      <td class="price-cell">${money(row.cost_of_goods_sold)}</td>
+      <td class="price-cell"><strong>${money(row.profit)}</strong></td>
+    </tr>`).join("") : `<tr><td colspan="13" class="empty-cell">No sales transactions recorded for ${label}. Record a client order to add sales.</td></tr>`;
+  $("salesTransactionsBody").innerHTML = renderedRows;
 }
 
 function updateOrderTotal() {
@@ -861,12 +1143,22 @@ function showApp(user) {
   $("summaryYear").innerHTML = Array.from({ length: 7 }, (_, index) => currentYear + 2 - index)
     .map(year => `<option value="${year}">${year}</option>`).join("");
   $("summaryYear").value = String(currentYear);
+  $("dashboardYear").innerHTML = $("summaryYear").innerHTML;
+  $("dashboardYear").value = String(currentYear);
+  $("dashboardMonth").innerHTML = Array.from({ length: 12 }, (_, index) =>
+    `<option value="${index + 1}">${new Intl.DateTimeFormat("en", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2020, index, 1)))}</option>`
+  ).join("");
+  $("dashboardMonth").value = String(new Date().getMonth() + 1);
+  $("salesTransactionYear").innerHTML = $("summaryYear").innerHTML;
+  $("salesTransactionYear").value = String(currentYear);
+  $("salesTransactionMonth").innerHTML = $("dashboardMonth").innerHTML;
+  $("salesTransactionMonth").value = String(new Date().getMonth() + 1);
 
   // Admin controls inventory editing; staff encodes orders and customers
   $("addItemBtn").classList.toggle("hidden", !isAdmin);
   $("newMovementBtn").classList.toggle("hidden", !isAdmin);
 
-  setView("inventory");
+  setView("dashboard");
   loadAll();
 }
 
@@ -878,6 +1170,11 @@ function setView(view) {
   const isAdmin = state.user?.role === "admin";
 
   const viewMeta = {
+    dashboard: {
+      title: "Dashboard",
+      eyebrow: "WORKSPACE",
+      subtitle: "Current inventory, sales, purchases, and performance overview."
+    },
     inventory: {
       title: "Inventory",
       eyebrow: "MATERIALS MANAGEMENT",
@@ -906,12 +1203,17 @@ function setView(view) {
     monthly: {
       title: "Monthly summary",
       eyebrow: "BUSINESS PERFORMANCE",
-      subtitle: "Review monthly purchases, net sales, discounts, cost of goods sold, and gross profit."
+      subtitle: "Record ending inventory by month and review the workbook-style monthly transaction summary."
     },
     orders: {
       title: "Client orders",
       eyebrow: "ORDER ENCODING",
       subtitle: "Encode and review client orders. Items ordered automatically deduct from inventory stock."
+    },
+    "sales-transactions": {
+      title: "Sales transactions",
+      eyebrow: "SALES & MONTHLY SUMMARY",
+      subtitle: "Review item-level sales transactions by month. Recorded client orders are included automatically."
     },
     sales: {
       title: "Sales per day",
@@ -948,11 +1250,15 @@ function setView(view) {
   $("newLossBtn").classList.toggle("hidden", view !== "losses" || !isAdmin);
 
   // Toggle stat cards
-  $("statsGrid").classList.toggle("hidden", view !== "inventory");
   $("monitoringStatsGrid").classList.toggle("hidden", view !== "inventory-monitoring");
   $("salesStatsGrid").classList.toggle("hidden", view !== "sales");
+  $("salesTransactionsControls").classList.toggle("hidden", view !== "sales-transactions");
+  $("salesTransactionsStatsGrid").classList.toggle("hidden", view !== "sales-transactions");
+  $("statsGrid").classList.toggle("hidden", view !== "inventory");
+  $("dashboardStatsGrid").classList.toggle("hidden", view !== "dashboard");
 
   // Toggle main panels
+  $("dashboardPanel").classList.toggle("hidden", view !== "dashboard");
   $("inventoryPanel").classList.toggle("hidden", view !== "inventory");
   $("inventoryMonitoringPanel").classList.toggle("hidden", view !== "inventory-monitoring");
   $("transactionsPanel").classList.toggle("hidden", view !== "transactions");
@@ -960,11 +1266,13 @@ function setView(view) {
   $("lossesPanel").classList.toggle("hidden", view !== "losses");
   $("monthlyPanel").classList.toggle("hidden", view !== "monthly");
   $("ordersPanel").classList.toggle("hidden", view !== "orders");
+  $("salesTransactionsPanel").classList.toggle("hidden", view !== "sales-transactions");
   $("salesPanel").classList.toggle("hidden", view !== "sales");
   $("customersPanel").classList.toggle("hidden", view !== "customers");
   $("usersPanel").classList.toggle("hidden", view !== "users");
   $("activityPanel").classList.toggle("hidden", view !== "activity");
 
+  if (view === "dashboard" && state.items.length) loadDashboard();
   if (view === "inventory") renderItems();
   if (view === "inventory-monitoring") loadInventoryMonitoring();
   if (view === "transactions") loadTransactions();
@@ -972,6 +1280,7 @@ function setView(view) {
   if (view === "losses") loadLosses();
   if (view === "monthly") loadMonthlySummary();
   if (view === "orders") loadOrders();
+  if (view === "sales-transactions") loadSalesTransactions();
   if (view === "sales") loadSalesSummary();
   if (view === "customers") loadCustomers();
   if (view === "users") loadUsers();
@@ -1083,6 +1392,23 @@ $("changePasswordForm").addEventListener("submit", async event => {
 $("addItemBtn").addEventListener("click", () => { resetItemForm(); openModal("itemModal"); });
 $("refreshBtn").addEventListener("click", loadAll);
 $("refreshInventoryMonitoringBtn").addEventListener("click", loadInventoryMonitoring);
+$("dashboardYear").addEventListener("change", loadDashboard);
+$("dashboardMonth").addEventListener("change", renderDashboard);
+$("salesTransactionMonth").addEventListener("change", () => resetTablePage("sales-transactions", renderSalesTransactions));
+$("salesTransactionYear").addEventListener("change", () => {
+  if (state.pagination["sales-transactions"]) state.pagination["sales-transactions"].page = 1;
+  loadSalesTransactions();
+});
+$("refreshSalesTransactionsBtn").addEventListener("click", loadSalesTransactions);
+$("recordSalesTransactionBtn").addEventListener("click", openOrderModal);
+$("dashboardItemFilter").addEventListener("change", renderDashboard);
+$("monthlyPanel").addEventListener("click", event => {
+  const button = event.target.closest("[data-closing-save], [data-closing-clear]");
+  const row = button?.closest("[data-closing-month]");
+  if (!button || !row) return;
+  if (button.hasAttribute("data-closing-save")) saveMonthlyClosing(row, button);
+  else clearMonthlyClosing(row, button);
+});
 $("itemBeginInventory").addEventListener("input", updateItemAmountPreviews);
 $("itemPrice").addEventListener("input", updateItemAmountPreviews);
 $("itemSupplierCost").addEventListener("input", updateItemAmountPreviews);

@@ -215,7 +215,7 @@ app.use("/api", (req, res, next) => {
   requireAuth(req, res, next);
 });
 
-app.use(["/api/items", "/api/summary", "/api/transactions", "/api/orders", "/api/customers", "/api/sales-summary"], staffRequired);
+app.use(["/api/items", "/api/summary", "/api/transactions", "/api/orders", "/api/customers", "/api/sales-summary", "/api/sales-transactions"], staffRequired);
 
 app.get("/api/auth/me", (req, res) => res.json({ user: req.user }));
 
@@ -1122,6 +1122,74 @@ async function saveClientOrder(req, res, userId) {
 
 app.post("/api/orders", (req, res) => saveClientOrder(req, res, req.user.user_id));
 
+app.get("/api/sales-transactions", async (req, res) => {
+  const rawYear = String(req.query.year || new Date().getFullYear());
+  const year = Number(rawYear);
+  if (!/^\d{4}$/.test(rawYear) || !Number.isInteger(year) || year < 2000 || year > 2100) {
+    return res.status(400).json({ error: "Choose a valid year." });
+  }
+  const start = new Date(Date.UTC(year, 0, 1)).toISOString();
+  const end = new Date(Date.UTC(year + 1, 0, 1)).toISOString();
+  const { data: orders, error } = await fetchAllPages(() => supabase.from("client_orders")
+    .select("id,receipt_number,client_name,discount_total,created_at,client_order_items(item_id,item_name,unit,quantity,unit_price,line_total,unit_cost,cost_total,inventory_items(item_number,sku,category,description))")
+    .gte("created_at", start).lt("created_at", end)
+    .order("created_at", { ascending: false }).order("id", { ascending: false }));
+  if (error) return fail(res, error);
+
+  const months = Array.from({ length: 12 }, (_, index) => ({
+    month: index + 1,
+    rows: [],
+    summary: { quantity: 0, discount: 0, retailSales: 0, sales: 0, costOfGoodsSold: 0, profit: 0 }
+  }));
+  for (const order of orders || []) {
+    const items = order.client_order_items || [];
+    const lineCents = items.map(item => Math.max(0, Math.round(Number(item.line_total || 0) * 100)));
+    const subtotalCents = lineCents.reduce((sum, value) => sum + value, 0);
+    const discountCents = Math.min(Math.max(0, Math.round(Number(order.discount_total || 0) * 100)), subtotalCents);
+    let remainingDiscountCents = discountCents;
+    const monthIndex = new Date(order.created_at).getUTCMonth();
+    const month = months[monthIndex];
+    items.forEach((item, index) => {
+      const allocatedDiscountCents = index === items.length - 1
+        ? remainingDiscountCents
+        : subtotalCents > 0 ? Math.min(remainingDiscountCents, Math.round(discountCents * lineCents[index] / subtotalCents)) : 0;
+      remainingDiscountCents -= allocatedDiscountCents;
+      const salesAmount = Math.max(0, lineCents[index] - allocatedDiscountCents) / 100;
+      const costOfGoodsSold = Number(item.cost_total || 0);
+      const inventoryItem = item.inventory_items || {};
+      const row = {
+        order_id: order.id,
+        receipt_number: order.receipt_number,
+        date: order.created_at,
+        sku: inventoryItem.sku || "",
+        item_number: inventoryItem.item_number || null,
+        item_id: item.item_id,
+        item_name: item.item_name,
+        category: inventoryItem.category || "",
+        description: inventoryItem.description || "",
+        supplier_cost: Number(item.unit_cost || 0),
+        selling_price: Number(item.unit_price || 0),
+        retail_sales: lineCents[index] / 100,
+        customer: order.client_name,
+        quantity: Number(item.quantity || 0),
+        discount: allocatedDiscountCents / 100,
+        sales_amount: salesAmount,
+        cost_of_goods_sold: costOfGoodsSold,
+        profit: salesAmount - costOfGoodsSold,
+        unit: item.unit
+      };
+      month.rows.push(row);
+      month.summary.quantity += row.quantity;
+      month.summary.discount += row.discount;
+      month.summary.retailSales += row.retail_sales;
+      month.summary.sales += row.sales_amount;
+      month.summary.costOfGoodsSold += row.cost_of_goods_sold;
+      month.summary.profit += row.profit;
+    });
+  }
+  res.json({ year, months });
+});
+
 app.get("/api/orders", async (req, res) => {
   const { data, error } = await fetchAllPages(() => supabase.from("client_orders")
     .select("id,receipt_number,client_name,client_email,client_phone,client_address,note,discount_total,total,order_channel,created_at,ordered_by_account:accounts!client_orders_ordered_by_fkey(display_name),client_order_items(item_name,unit,quantity,unit_price,line_total,unit_cost,cost_total)")
@@ -1190,7 +1258,7 @@ app.get("/api/management-summary", async (req, res) => {
       .select("amount,created_at")
       .gte("created_at", start).lt("created_at", end).order("created_at").order("id")),
     fetchAllPages(() => supabase.from("client_orders")
-      .select("total,discount_total,created_at,client_order_items(quantity,cost_total)")
+      .select("total,discount_total,created_at,client_order_items(item_id,item_name,quantity,line_total,cost_total)")
       .gte("created_at", start).lt("created_at", end).order("created_at").order("id"))
   ]);
   if (transactionsResult.error) return fail(res, transactionsResult.error);
@@ -1225,6 +1293,7 @@ app.get("/api/management-summary", async (req, res) => {
   for (const payment of paymentsResult.data || []) {
     months[new Date(payment.created_at).getUTCMonth()].creditPayments += Number(payment.amount || 0);
   }
+  const topSellersByItem = new Map();
   for (const order of ordersResult.data || []) {
     const entry = months[new Date(order.created_at).getUTCMonth()];
     const items = order.client_order_items || [];
@@ -1232,9 +1301,92 @@ app.get("/api/management-summary", async (req, res) => {
     entry.sales += Number(order.total || 0);
     entry.discounts += Number(order.discount_total || 0);
     entry.costOfGoodsSold += items.reduce((sum, item) => sum + Number(item.cost_total || 0), 0);
+    for (const item of items) {
+      const key = item.item_id || item.item_name;
+      const seller = topSellersByItem.get(key) || { name: item.item_name, quantity: 0, sales: 0 };
+      seller.quantity += Number(item.quantity || 0);
+      seller.sales += Number(item.line_total || 0);
+      topSellersByItem.set(key, seller);
+    }
   }
   for (const entry of months) entry.grossProfit = entry.sales - entry.costOfGoodsSold;
-  res.json({ year, months });
+  const topSellers = [...topSellersByItem.values()]
+    .sort((a, b) => b.quantity - a.quantity || b.sales - a.sales || a.name.localeCompare(b.name))
+    .slice(0, 5);
+  res.json({ year, months, topSellers });
+});
+
+app.get("/api/monthly-inventory-closings", async (req, res) => {
+  const rawYear = String(req.query.year || new Date().getFullYear());
+  if (!/^\d{4}$/.test(rawYear) || Number(rawYear) < 2000 || Number(rawYear) > 2100) {
+    return res.status(400).json({ error: "Choose a year between 2000 and 2100." });
+  }
+  const { data, error } = await supabase.from("monthly_inventory_closings")
+    .select("year,month,ending_date,ending_amount,ending_quantity,updated_at")
+    .eq("year", Number(rawYear)).order("month");
+  if (error) return fail(res, error);
+  res.json(data);
+});
+
+app.post("/api/monthly-inventory-closings", adminRequired, async (req, res) => {
+  const year = Number(req.body?.year);
+  const month = Number(req.body?.month);
+  const date = typeof req.body?.ending_date === "string" ? req.body.ending_date : "";
+  const amountText = String(req.body?.ending_amount ?? "");
+  const quantityText = String(req.body?.ending_quantity ?? "");
+  const amount = Number(amountText);
+  const quantity = Number(quantityText);
+  const dateObject = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00.000Z`) : null;
+  const validDate = dateObject && !Number.isNaN(dateObject.getTime()) && dateObject.toISOString().slice(0, 10) === date;
+  if (!Number.isInteger(year) || year < 2000 || year > 2100
+    || !Number.isInteger(month) || month < 1 || month > 12) {
+    return res.status(400).json({ error: "Choose a valid year and month." });
+  }
+  if (!validDate || date.slice(0, 4) !== String(year) || Number(date.slice(5, 7)) !== month) {
+    return res.status(400).json({ error: "The ending date must fall within the selected month and year." });
+  }
+  if (![amount, quantity].every(value => Number.isFinite(value) && value >= 0 && value <= 9999999999.99)
+    || !/^\d+(?:\.\d{1,2})?$/.test(amountText)
+    || !/^\d+(?:\.\d{1,2})?$/.test(quantityText)) {
+    return res.status(400).json({ error: "Ending amount and quantity must be non-negative numbers with up to two decimal places." });
+  }
+
+  const { data, error } = await supabase.from("monthly_inventory_closings").upsert({
+    year,
+    month,
+    ending_date: date,
+    ending_amount: amount,
+    ending_quantity: quantity,
+    updated_by: req.user.user_id,
+    updated_at: new Date().toISOString()
+  }, { onConflict: "year,month" }).select("year,month,ending_date,ending_amount,ending_quantity,updated_at").single();
+  if (error) return fail(res, error);
+  if (!await recordActivity(req, res, {
+    action: "monthly_inventory_closing.saved",
+    entityType: "monthly_inventory_closing",
+    entityId: `${year}-${String(month).padStart(2, "0")}`,
+    summary: `Ending inventory saved for ${year}-${String(month).padStart(2, "0")}.`
+  })) return;
+  res.json(data);
+});
+
+app.delete("/api/monthly-inventory-closings/:year/:month", adminRequired, async (req, res) => {
+  const year = Number(req.params.year);
+  const month = Number(req.params.month);
+  if (!Number.isInteger(year) || year < 2000 || year > 2100
+    || !Number.isInteger(month) || month < 1 || month > 12) {
+    return res.status(400).json({ error: "Choose a valid year and month." });
+  }
+  const { error } = await supabase.from("monthly_inventory_closings")
+    .delete().eq("year", year).eq("month", month);
+  if (error) return fail(res, error);
+  if (!await recordActivity(req, res, {
+    action: "monthly_inventory_closing.cleared",
+    entityType: "monthly_inventory_closing",
+    entityId: `${year}-${String(month).padStart(2, "0")}`,
+    summary: `Ending inventory cleared for ${year}-${String(month).padStart(2, "0")}.`
+  })) return;
+  res.json({ ok: true });
 });
 
 app.get("/api/orders/export", async (req, res) => {

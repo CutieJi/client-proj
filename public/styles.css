@@ -407,6 +407,8 @@ button {
     position: fixed;
     inset: 0 auto 0 0;
     width: 238px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: #151f2b;
     border-right: 1px solid var(--line);
     padding: 25px 16px 16px;
@@ -565,9 +567,13 @@ button {
 }
 
 .crumb {
+    min-width: 0;
+    overflow: hidden;
     color: #8992a0;
     font-size: 12px;
-    margin: 0
+    margin: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap
 }
 
 .crumb span {
@@ -582,9 +588,15 @@ button {
 
 .topbar-right {
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
     gap: 17px;
     margin-left: auto
+}
+
+.connection,
+.profile-menu {
+    flex: 0 0 auto
 }
 
 .account-display-name {
@@ -768,6 +780,316 @@ h1 {
     margin-bottom: 22px
 }
 
+.dashboard-year-field {
+    min-width: 120px;
+    margin: 0
+}
+
+.dashboard-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: flex-end;
+    gap: 16px
+}
+
+.dashboard-date {
+    padding-bottom: 10px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .5px
+}
+
+.dashboard-date strong {
+    margin-left: 5px;
+    color: var(--text);
+    font-size: 12px;
+    letter-spacing: 0
+}
+
+.dashboard-year-field select,
+.dashboard-category-filter select {
+    min-width: 100px;
+    margin-left: 6px
+}
+
+.dashboard-category-filter select {
+    display: block;
+    width: 100%;
+    margin: 6px 0 12px
+}
+
+.dashboard-content-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px
+}
+
+.dashboard-card {
+    min-width: 0;
+    padding: 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow)
+}
+
+.dashboard-card h3 {
+    margin: 0 0 14px;
+    color: var(--text);
+    font: 700 14px Manrope, sans-serif
+}
+
+.dashboard-month-chart,
+#dashboardTopMonths,
+#dashboardBestSellers,
+#dashboardCurrentInventory,
+#dashboardMonthlySummary,
+#dashboardItemSummary {
+    display: grid;
+    gap: 10px
+}
+
+.dashboard-summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 11px
+}
+
+.dashboard-summary-row strong {
+    color: var(--text);
+    font-weight: 700;
+    text-align: right
+}
+
+#dashboardCurrentInventory {
+    max-height: 390px;
+    overflow-y: auto;
+    padding-right: 4px
+}
+
+.dashboard-month-row {
+    display: grid;
+    grid-template-columns: 38px minmax(40px, 1fr) minmax(88px, auto);
+    align-items: center;
+    gap: 9px;
+    color: var(--muted);
+    font-size: 11px
+}
+
+.dashboard-month-row strong {
+    color: var(--text);
+    font-size: 11px;
+    text-align: right
+}
+
+.dashboard-bar-track {
+    height: 8px;
+    overflow: hidden;
+    border-radius: 5px;
+    background: var(--surface-soft)
+}
+
+.dashboard-bar-track i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--blue)
+}
+
+.dashboard-rank-row,
+.dashboard-inventory-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 34px;
+    color: var(--muted);
+    font-size: 11px
+}
+
+.dashboard-rank-row strong,
+.dashboard-inventory-row strong {
+    flex: 1;
+    min-width: 0;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis
+}
+
+.dashboard-rank {
+    display: grid;
+    place-items: center;
+    width: 23px;
+    height: 23px;
+    flex: 0 0 23px;
+    border-radius: 50%;
+    background: var(--blue-soft);
+    color: var(--blue);
+    font-weight: 700
+}
+
+.dashboard-inventory-row {
+    justify-content: space-between;
+    border-bottom: 1px solid var(--line)
+}
+
+.dashboard-inventory-row span {
+    min-width: 0
+}
+
+.dashboard-inventory-row small {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted)
+}
+
+.dashboard-category-filter {
+    display: block;
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-size: 11px
+}
+
+.dashboard-empty,
+.dashboard-error {
+    margin: 8px 0;
+    font-size: 12px
+}
+
+.monthly-board-section {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    min-width: 0;
+    overflow: hidden
+}
+
+#monthlyPanel {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0
+}
+
+.monthly-board-section>.table-wrap {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    isolation: isolate
+}
+
+.monthly-board-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px
+}
+
+.monthly-board-heading h3 {
+    margin: 0 0 5px;
+    color: var(--text);
+    font: 700 15px Manrope, sans-serif
+}
+
+.monthly-board-heading p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px
+}
+
+.monthly-ending-table {
+    min-width: 720px
+}
+
+.monthly-ending-table th,
+.monthly-ending-table td {
+    padding: 7px 10px
+}
+
+.monthly-ending-table input {
+    width: 100%;
+    min-width: 110px;
+    height: 32px;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 12px
+}
+
+.monthly-closing-actions {
+    min-width: 130px;
+    white-space: nowrap
+}
+
+.monthly-closing-actions .small-action {
+    margin-right: 5px
+}
+
+.monthly-summary-table {
+    min-width: 1280px
+}
+
+.monthly-summary-table th,
+.monthly-summary-table td {
+    padding-right: 10px;
+    padding-left: 10px
+}
+
+.monthly-summary-table tbody td {
+    padding-top: 9px;
+    padding-bottom: 9px
+}
+
+.monthly-summary-table thead th {
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+    background: var(--surface-soft)
+}
+
+.monthly-summary-table tbody td,
+.monthly-summary-table tfoot th {
+    white-space: nowrap
+}
+
+.monthly-summary-table tfoot th {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border-top: 2px solid var(--line);
+    background: var(--surface-soft)
+}
+
+.monthly-board-error {
+    margin: 8px 0 0
+}
+
+@media(max-width:900px) {
+    .dashboard-content-grid {
+        grid-template-columns: minmax(0, 1fr)
+    }
+
+    .panel-header {
+        flex-wrap: wrap;
+        align-items: flex-start
+    }
+
+    .panel-header>div:first-child {
+        min-width: 0;
+        flex: 1 1 260px
+    }
+}
+
 .stat-card {
     padding: 17px 18px 16px;
     background: var(--surface);
@@ -919,6 +1241,74 @@ h1 {
 
 .inventory-monitoring-table {
     min-width: 2900px
+}
+
+.sales-month-section {
+    margin: 0 0 20px;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #e8ebef;
+    border-radius: 8px;
+    background: var(--surface)
+}
+
+.sales-month-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px 12px
+}
+
+.sales-month-heading p {
+    margin: 0 0 4px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .45px;
+    text-transform: uppercase
+}
+
+.sales-month-heading h3 {
+    margin: 0;
+    color: var(--text);
+    font-size: 16px
+}
+
+.sales-month-heading>span {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700
+}
+
+.sales-month-total {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 22px;
+    padding: 11px 18px;
+    border-top: 1px solid #e9edf1;
+    border-bottom: 1px solid #e9edf1;
+    background: #fafbfc;
+    color: var(--text);
+    font-size: 11px
+}
+
+.sales-month-total strong {
+    margin-right: auto;
+    letter-spacing: .35px
+}
+
+.sales-transactions-table {
+    min-width: 1800px
+}
+
+.sales-transaction-stats {
+    margin-bottom: 18px
+}
+
+.sales-transactions-error {
+    margin: 0 21px 16px
 }
 
 .inventory-monitoring-table thead th {
@@ -1631,6 +2021,14 @@ body.dark .table-footer {
         padding: 0 23px
     }
 
+    .account-display-name {
+        max-width: 135px
+    }
+
+    .topbar-right {
+        gap: 10px
+    }
+
     .stats-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr))
     }
@@ -1711,6 +2109,10 @@ body.dark .table-footer {
         padding: 0 16px
     }
 
+    .topbar .crumb {
+        flex: 1 1 auto
+    }
+
     .crumb {
         margin: 0
     }
@@ -1725,6 +2127,10 @@ body.dark .table-footer {
 
     .connection {
         font-size: 0
+    }
+
+    .connection>span {
+        display: none
     }
 
     .connection i {
@@ -1770,6 +2176,35 @@ body.dark .table-footer {
 
     .panel-header {
         padding: 17px 14px
+    }
+
+    #appShell .sidebar:not(.open) {
+        transform: translateX(-100%)
+    }
+
+    #appShell .sidebar.open {
+        transform: translateX(0)
+    }
+
+    #appShell .main {
+        width: 100%;
+        min-width: 0;
+        margin-left: 0
+    }
+
+    .sales-month-heading {
+        padding-right: 14px;
+        padding-left: 14px
+    }
+
+    .sales-month-total {
+        padding-right: 14px;
+        padding-left: 14px
+    }
+
+    .sales-transactions-error {
+        margin-right: 14px;
+        margin-left: 14px
     }
 
     .toolbar {
