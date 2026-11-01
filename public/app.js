@@ -110,11 +110,9 @@ async function loadAll() {
     const [items, summary, health] = await Promise.all([api("/api/items"), api("/api/summary"), api("/api/health")]);
     state.items = items;
     $("connectionText").textContent = health.supabaseConfigured ? "Connected" : "Setup needed";
-    $("totalItems").textContent = summary.totalItems.toLocaleString("en-PH");
-    $("stockUnits").textContent = summary.stockUnits.toLocaleString("en-PH");
-    $("inventoryValue").textContent = money(summary.inventoryValue);
-    $("inventoryCostValue").textContent = money(summary.inventoryCostValue);
-    $("lowStock").textContent = summary.lowStock.toLocaleString("en-PH");
+    $("beginInventoryUnits").textContent = Number(summary.beginInventoryUnits).toLocaleString("en-PH");
+    $("beginInventoryRetailAmount").textContent = money(summary.beginInventoryRetailAmount);
+    $("beginInventoryCostValue").textContent = money(summary.beginInventoryCostValue);
     renderCategories();
     renderItems();
     renderMovementOptions();
@@ -130,9 +128,9 @@ async function loadAll() {
   } catch (error) {
     if (error.status === 401) return window.location.replace("/");
     $("connectionText").textContent = "Connection issue";
-    $("inventoryBody").innerHTML = `<tr><td colspan="14" class="empty-cell">${esc(error.message)}</td></tr>`;
+    $("inventoryBody").innerHTML = `<tr><td colspan="17" class="empty-cell">${esc(error.message)}</td></tr>`;
     $("rowCount").textContent = "Unable to load";
-    ["totalItems", "stockUnits", "inventoryValue", "inventoryCostValue", "lowStock"].forEach(id => $(id).textContent = "—");
+    ["beginInventoryUnits", "beginInventoryRetailAmount", "beginInventoryCostValue"].forEach(id => $(id).textContent = "—");
   }
 }
 
@@ -160,6 +158,11 @@ function renderCategories() {
   const cats = [...new Set(state.items.map(x => x.category))].filter(Boolean).sort();
   select.innerHTML = `<option>All categories</option>${cats.map(c => `<option>${esc(c)}</option>`).join("")}`;
   select.value = cats.includes(current) ? current : "All categories";
+  const itemCategories = $("itemCategories");
+  const masterfileCategories = [...new Set(state.items.map(item => item.category).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  itemCategories.innerHTML = [...new Set([...masterfileCategories, "Other"])]
+    .map(category => `<option value="${esc(category)}"></option>`).join("");
 }
 
 function renderItems() {
@@ -205,11 +208,14 @@ function renderItems() {
       <td>${esc(item.other_details || "—")}</td>
       <td class="price-cell">${money(item.unit_price)}</td>
       <td>${Number(item.low_stock_threshold).toLocaleString("en-PH")}</td>
+      <td class="quantity-cell">${Number(item.begin_inventory || 0).toLocaleString("en-PH")}</td>
+      <td class="price-cell">${money(Number(item.begin_inventory || 0) * Number(item.unit_price || 0))}</td>
+      <td class="price-cell">${money(Number(item.begin_inventory || 0) * Number(item.supplier_cost || 0))}</td>
       <td class="quantity-cell">${Number(item.quantity).toLocaleString("en-PH")} <span style="font-weight:400;color:#8993a1">${esc(item.unit)}</span></td>
       <td><span class="stock-badge ${cls}">${status}</span></td>
       <td>${actionsHtml}</td>
     </tr>`;
-  }).join("") : `<tr><td colspan="14" class="empty-cell">No materials match your filters.</td></tr>`;
+  }).join("") : `<tr><td colspan="17" class="empty-cell">No materials match your filters.</td></tr>`;
 
   $("rowCount").textContent = `${rows.length} matching items`;
 }
@@ -296,9 +302,12 @@ function resetItemForm() {
   $("itemId").value = "";
   $("itemNumber").value = "";
   $("itemQuantity").value = "0";
+  $("itemQuantity").dataset.manuallySet = "false";
+  $("itemBeginInventory").value = "0";
   $("itemSupplierCost").value = "0";
   $("itemPrice").value = "0";
-  $("itemThreshold").value = "5";
+  $("itemThreshold").value = "0";
+  updateItemAmountPreviews();
   $("modalTitle").textContent = "Add material";
   $("saveItemBtn").textContent = "Save item";
   $("itemError").textContent = "";
@@ -322,12 +331,23 @@ function editItem(item) {
     itemSupplierCost: "supplier_cost",
     itemPrice: "unit_price",
     itemThreshold: "low_stock_threshold",
+    itemBeginInventory: "begin_inventory",
     itemDescription: "description",
     itemOtherDetails: "other_details",
     itemNotes: "notes"
   };
   Object.entries(map).forEach(([id, key]) => $(id).value = item[key] ?? "");
+  updateItemAmountPreviews();
   openModal("itemModal");
+}
+
+function updateItemAmountPreviews() {
+  const beginning = Number($("itemBeginInventory").value) || 0;
+  if (!$("itemId").value && $("itemQuantity").dataset.manuallySet !== "true") {
+    $("itemQuantity").value = $("itemBeginInventory").value || "0";
+  }
+  $("itemRetailInventoryAmount").value = money(beginning * (Number($("itemPrice").value) || 0));
+  $("itemInventoryCostValueAmount").value = money(beginning * (Number($("itemSupplierCost").value) || 0));
 }
 
 // STOCK MOVEMENTS & DEDUCTIONS
@@ -1063,6 +1083,12 @@ $("changePasswordForm").addEventListener("submit", async event => {
 $("addItemBtn").addEventListener("click", () => { resetItemForm(); openModal("itemModal"); });
 $("refreshBtn").addEventListener("click", loadAll);
 $("refreshInventoryMonitoringBtn").addEventListener("click", loadInventoryMonitoring);
+$("itemBeginInventory").addEventListener("input", updateItemAmountPreviews);
+$("itemPrice").addEventListener("input", updateItemAmountPreviews);
+$("itemSupplierCost").addEventListener("input", updateItemAmountPreviews);
+$("itemQuantity").addEventListener("input", () => {
+  if (!$("itemId").value) $("itemQuantity").dataset.manuallySet = "true";
+});
 $("monitoringSearchInput").addEventListener("input", () => resetTablePage("inventory-monitoring", renderInventoryMonitoring));
 $("monitoringCategoryFilter").addEventListener("change", () => resetTablePage("inventory-monitoring", renderInventoryMonitoring));
 $("monitoringStockFilter").addEventListener("change", () => resetTablePage("inventory-monitoring", renderInventoryMonitoring));
@@ -1288,6 +1314,7 @@ $("itemForm").addEventListener("submit", async e => {
     quantity: $("itemQuantity").value,
     unit_price: $("itemPrice").value,
     low_stock_threshold: $("itemThreshold").value,
+    begin_inventory: $("itemBeginInventory").value,
     notes: $("itemNotes").value
   };
   try {

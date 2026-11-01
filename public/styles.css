@@ -471,6 +471,12 @@ button {
     text-align: left
 }
 
+.nav-section-label {
+    margin-top: 10px;
+    padding-top: 14px;
+    border-top: 1px solid #2b3644
+}
+
 .nav-link {
     border: 0;
     background: transparent;

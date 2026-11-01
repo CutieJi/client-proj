@@ -5,7 +5,7 @@ A modern, minimal inventory app for the handwritten building-material price list
 ## Included
 
 - Inventory table matching the Masterfile Management item fields and item-number order, with live quantity linked to Inventory Monitoring
-- Summary cards for item count, total stock units, retail inventory value, supplier-cost value, and low-stock items
+- Summary cards matching the Masterfile's beginning inventory quantity, retail inventory amount, and inventory cost value; Inventory includes the Masterfile's calculated retail and cost amount columns
 - Inventory page and Add/Edit forms for Masterfile item number, SKU, item details, supplier cost, supplier, brand, other details, selling price, and reorder point; live stock remains linked to Inventory Monitoring
 - Separate Inventory Monitoring page matching the workbook's monitoring columns; both pages use the same inventory items, and imported spreadsheet totals remain the baseline while new app transactions are added
 - Add, edit, and delete material records

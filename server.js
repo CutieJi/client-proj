@@ -414,15 +414,13 @@ app.get("/api/items", async (req, res) => {
 
 app.get("/api/summary", async (req, res) => {
   const { data, error } = await fetchAllPages(() => supabase.from("inventory_items")
-    .select("id,quantity,unit_price,supplier_cost,low_stock_threshold").order("id"));
+    .select("id,begin_inventory,unit_price,supplier_cost").order("id"));
   if (error) return fail(res, error);
   const rows = data || [];
   res.json({
-    totalItems: rows.length,
-    stockUnits: rows.reduce((n, x) => n + Number(x.quantity || 0), 0),
-    inventoryValue: rows.reduce((n, x) => n + Number(x.quantity || 0) * Number(x.unit_price || 0), 0),
-    inventoryCostValue: rows.reduce((n, x) => n + Number(x.quantity || 0) * Number(x.supplier_cost || 0), 0),
-    lowStock: rows.filter(x => Number(x.quantity || 0) <= Number(x.low_stock_threshold || 0)).length
+    beginInventoryUnits: rows.reduce((n, x) => n + Number(x.begin_inventory || 0), 0),
+    beginInventoryRetailAmount: rows.reduce((n, x) => n + Number(x.begin_inventory || 0) * Number(x.unit_price || 0), 0),
+    beginInventoryCostValue: rows.reduce((n, x) => n + Number(x.begin_inventory || 0) * Number(x.supplier_cost || 0), 0)
   });
 });
 
@@ -580,7 +578,7 @@ app.post("/api/items", adminRequired, async (req, res) => {
   const {
     name, category, description = "", supplier = "", supplier_cost = 0,
     brand = "", variant = "", other_details = "", unit = "piece",
-    quantity = 0, unit_price = 0, low_stock_threshold = 5, sku = "", notes = "",
+    quantity = 0, begin_inventory = 0, unit_price = 0, low_stock_threshold = 0, sku = "", notes = "",
     item_number = null
   } = req.body || {};
   if (!name?.trim() || !category?.trim()) return res.status(400).json({ error: "Item name and category are required." });
@@ -592,12 +590,12 @@ app.post("/api/items", adminRequired, async (req, res) => {
     name: name.trim(), category: category.trim(), description: description.trim(), supplier: supplier.trim(),
     supplier_cost: Number(supplier_cost), brand: brand.trim(), variant: variant.trim(),
     other_details: other_details.trim(), unit, quantity: Number(quantity), unit_price: Number(unit_price),
-    low_stock_threshold: Number(low_stock_threshold), sku: sku.trim(), notes: notes.trim(),
+    low_stock_threshold: Number(low_stock_threshold), begin_inventory: Number(begin_inventory), sku: sku.trim(), notes: notes.trim(),
     item_number: parsedItemNumber
   };
-  if (![payload.quantity, payload.unit_price, payload.supplier_cost, payload.low_stock_threshold].every(Number.isFinite)
-    || payload.quantity < 0 || payload.unit_price < 0 || payload.supplier_cost < 0 || payload.low_stock_threshold < 0) {
-    return res.status(400).json({ error: "Quantity, supplier cost, selling price, and reorder point must be zero or greater." });
+  if (![payload.quantity, payload.begin_inventory, payload.unit_price, payload.supplier_cost, payload.low_stock_threshold].every(Number.isFinite)
+    || payload.quantity < 0 || payload.begin_inventory < 0 || payload.unit_price < 0 || payload.supplier_cost < 0 || payload.low_stock_threshold < 0) {
+    return res.status(400).json({ error: "Quantity, beginning inventory, supplier cost, selling price, and reorder point must be zero or greater." });
   }
   const { data, error } = await supabase.from("inventory_items").insert(payload).select().single();
   if (error?.code === "23505") return res.status(409).json({ error: "That item number is already assigned to another item." });
@@ -612,10 +610,10 @@ app.post("/api/items", adminRequired, async (req, res) => {
 });
 
 app.patch("/api/items/:id", adminRequired, async (req, res) => {
-  const allowed = ["name", "category", "description", "supplier", "supplier_cost", "brand", "variant", "other_details", "unit", "quantity", "unit_price", "low_stock_threshold", "sku", "notes", "item_number"];
+  const allowed = ["name", "category", "description", "supplier", "supplier_cost", "brand", "variant", "other_details", "unit", "quantity", "begin_inventory", "unit_price", "low_stock_threshold", "sku", "notes", "item_number"];
   const payload = {};
   for (const key of allowed) if (req.body[key] !== undefined) payload[key] = req.body[key];
-  for (const key of ["quantity", "supplier_cost", "unit_price", "low_stock_threshold"]) {
+  for (const key of ["quantity", "begin_inventory", "supplier_cost", "unit_price", "low_stock_threshold"]) {
     if (payload[key] !== undefined) {
       payload[key] = Number(payload[key]);
       if (!Number.isFinite(payload[key]) || payload[key] < 0) return res.status(400).json({ error: `${key} must be zero or greater.` });

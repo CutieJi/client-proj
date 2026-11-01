@@ -16,16 +16,17 @@
         <span><strong>Materials</strong><small>INVENTORY</small></span>
       </a>
       <div class="nav-label">WORKSPACE</div>
-      <button class="nav-link active" data-view="inventory">
+      <button class="nav-link active" data-view="inventory" aria-label="Masterfile Management">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
           <path d="M1 2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1zm7 0a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1zM1 10a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1zm7 0a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1z" />
-        </svg></span> Inventory
+        </svg></span> Masterfile Management
       </button>
       <button class="nav-link" data-view="inventory-monitoring">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
           <path d="M2 1h12a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1m1 3v2h3V4zm4 0v2h5V4zM3 7v2h3V7zm4 0v2h5V7zm-4 3v2h3v-2zm4 0v2h5v-2z"/>
         </svg></span> Inventory Monitoring
       </button>
+      <div class="nav-label nav-section-label">OPERATIONS</div>
       <button class="nav-link" data-view="transactions">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
           <path d="M14 8a.5.5 0 0 1-.5.5H3.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 0 1 .708.708L3.707 7.5H13.5A.5.5 0 0 1 14 8m-12-5a.5.5 0 0 1 .5-.5h9.793l-2.147-2.146a.5.5 0 0 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L12.293 3.5H2.5A.5.5 0 0 1 2 3" transform="translate(0 2)" />
@@ -110,24 +111,16 @@
         <!-- Inventory Stats -->
         <div class="stats-grid" id="statsGrid">
           <article class="stat-card">
-            <div class="stat-top"><span>Total products</span></div><strong
-              id="totalItems">—</strong><small>Distinct inventory items</small>
+            <div class="stat-top"><span>Inventory Quantity</span></div><strong
+              id="beginInventoryUnits">—</strong><small>Begin Inventory total from Masterfile</small>
           </article>
           <article class="stat-card">
-            <div class="stat-top"><span>Units in stock</span></div><strong
-              id="stockUnits">—</strong><small>Across all items</small>
+            <div class="stat-top"><span>Begin. Retail Inventory Amount</span></div><strong
+              id="beginInventoryRetailAmount">—</strong><small>Masterfile total</small>
           </article>
           <article class="stat-card">
-            <div class="stat-top"><span>Retail inventory</span></div><strong
-              id="inventoryValue">—</strong><small>Quantity × selling price</small>
-          </article>
-          <article class="stat-card">
-            <div class="stat-top"><span>Inventory cost value</span></div><strong
-              id="inventoryCostValue">—</strong><small>Quantity × supplier cost</small>
-          </article>
-          <article class="stat-card">
-            <div class="stat-top"><span>Low stock</span><span class="stat-icon warning">!</span></div><strong
-              id="lowStock">—</strong><small>At or below threshold</small>
+            <div class="stat-top"><span>Inventory Cost Value</span></div><strong
+              id="beginInventoryCostValue">—</strong><small>Masterfile total</small>
           </article>
         </div>
 
@@ -192,6 +185,9 @@
                   <th>Other details</th>
                   <th>Selling price</th>
                   <th>Re-order point</th>
+                  <th>Begin inventory</th>
+                  <th>Retail Inventory Amount</th>
+                  <th>Inventory Cost Value Amount</th>
                   <th>Current quantity</th>
                   <th>Stock status</th>
                   <th id="inventoryActionsHeader">Actions</th>
@@ -199,7 +195,7 @@
               </thead>
               <tbody id="inventoryBody">
                 <tr>
-                  <td colspan="14" class="empty-cell">Loading inventory…</td>
+                  <td colspan="17" class="empty-cell">Loading inventory…</td>
                 </tr>
               </tbody>
             </table>
@@ -465,7 +461,7 @@
     <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-heading">
         <div>
-          <p class="eyebrow">INVENTORY RECORD</p>
+          <p class="eyebrow">MASTERFILE MANAGEMENT</p>
           <h2 id="modalTitle">Add material</h2>
         </div><button class="icon-button close-modal" data-close="itemModal" aria-label="Close">×</button>
       </div>
@@ -496,7 +492,13 @@
               required></label>
           <label class="field">Re-order point<input id="itemThreshold" type="number" min="0" step="1"
               value="5"></label>
-          <label class="field">Current quantity *<input id="itemQuantity" type="number" min="0" step="0.01" value="0"
+          <label class="field">Begin Inventory<input id="itemBeginInventory" type="number" min="0" step="0.01"
+              value="0"></label>
+          <label class="field">Retail Inventory Amount<input id="itemRetailInventoryAmount" type="text" readonly
+              value="₱0.00"></label>
+          <label class="field">Inventory Cost Value Amount<input id="itemInventoryCostValueAmount" type="text" readonly
+              value="₱0.00"></label>
+          <label class="field">Current quantity (on hand) *<input id="itemQuantity" type="number" min="0" step="0.01" value="0"
               required></label>
           <label class="field">Unit<select id="itemUnit">
               <option value="piece">piece</option><option value="bag">bag</option><option value="kilo">kilo</option>
