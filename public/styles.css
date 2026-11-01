@@ -551,11 +551,11 @@ button {
     height: 6px;
     border-right: 1.5px solid currentColor;
     border-bottom: 1.5px solid currentColor;
-    transform: translate(-50%, -50%) rotate(225deg)
+    transform: translate(-50%, -50%) rotate(45deg)
 }
 
 .nav-parent[aria-expanded="true"] .nav-chevron::before {
-    transform: translate(-50%, -50%) rotate(45deg)
+    transform: translate(-50%, -50%) rotate(225deg)
 }
 
 .nav-submenu {
@@ -663,7 +663,7 @@ button {
 }
 
 .crumb b {
-    font-weight: 600;
+    font-weight: 700;
     color: #374357
 }
 
@@ -863,6 +863,22 @@ h1 {
 
 .dashboard-stats-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr))
+}
+
+#salesStatsGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 1fr;
+    align-items: stretch
+}
+
+#salesStatsGrid .stat-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%
+}
+
+#salesStatsGrid .stat-card>small {
+    margin-top: auto
 }
 
 .dashboard-stats-grid .stat-card {
@@ -1181,6 +1197,68 @@ h1 {
 
 .monthly-closing-actions .small-action {
     margin-right: 5px
+}
+
+@media(max-width:720px) {
+    .monthly-ending-table {
+        min-width: 0;
+        table-layout: fixed;
+        white-space: normal
+    }
+
+    .monthly-ending-table thead {
+        display: none
+    }
+
+    .monthly-ending-table tbody {
+        display: block
+    }
+
+    .monthly-ending-table tbody tr {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px 12px;
+        margin-bottom: 10px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface)
+    }
+
+    .monthly-ending-table tbody td {
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        white-space: normal
+    }
+
+    .monthly-ending-table tbody td:first-child,
+    .monthly-ending-table tbody td[data-label="Action"] {
+        grid-column: 1 / -1
+    }
+
+    .monthly-ending-table tbody td:first-child {
+        font-weight: 700
+    }
+
+    .monthly-ending-table tbody td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 4px;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 700
+    }
+
+    .monthly-ending-table input {
+        box-sizing: border-box;
+        min-width: 0;
+        max-width: 100%
+    }
+
+    .monthly-ending-table .monthly-closing-actions {
+        min-width: 0
+    }
 }
 
 .monthly-summary-table {
@@ -2277,6 +2355,10 @@ body.dark .table-footer {
     }
 
     .stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr))
+    }
+
+    #salesStatsGrid {
         grid-template-columns: repeat(2, minmax(0, 1fr))
     }
 }

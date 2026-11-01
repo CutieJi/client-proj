@@ -744,16 +744,17 @@ function renderMonthlyClosings(year, monthNames) {
     const closing = closings.get(month);
     const label = monthNames.format(new Date(Date.UTC(year, index, 1)));
     if (!isAdmin) {
-      return `<tr><td><strong>${label}</strong></td><td>${closing ? esc(closing.ending_date) : "—"}</td>
-        <td class="price-cell">${closing ? money(closing.ending_amount) : "—"}</td>
-        <td class="quantity-cell">${closing ? Number(closing.ending_quantity).toLocaleString("en-PH") : "—"}</td><td>—</td></tr>`;
+      return `<tr><td><strong>${label}</strong></td><td data-label="Ending date">${closing ? esc(closing.ending_date) : "—"}</td>
+        <td class="price-cell" data-label="Ending amount">${closing ? money(closing.ending_amount) : "—"}</td>
+        <td class="quantity-cell" data-label="Ending quantity">${closing ? Number(closing.ending_quantity).toLocaleString("en-PH") : "—"}</td>
+        <td data-label="Action">—</td></tr>`;
     }
     return `<tr data-closing-month="${month}">
       <td><strong>${label}</strong></td>
-      <td><input data-closing-date type="date" aria-label="${label} ending date" value="${esc(closing?.ending_date || "")}"></td>
-      <td><input data-closing-amount type="number" min="0" max="9999999999.99" step="0.01" aria-label="${label} ending amount" value="${closing ? esc(closing.ending_amount) : ""}"></td>
-      <td><input data-closing-quantity type="number" min="0" max="9999999999.99" step="0.01" aria-label="${label} ending quantity" value="${closing ? esc(closing.ending_quantity) : ""}"></td>
-      <td class="monthly-closing-actions">
+      <td data-label="Ending date"><input data-closing-date type="date" aria-label="${label} ending date" value="${esc(closing?.ending_date || "")}"></td>
+      <td data-label="Ending amount"><input data-closing-amount type="number" min="0" max="9999999999.99" step="0.01" aria-label="${label} ending amount" value="${closing ? esc(closing.ending_amount) : ""}"></td>
+      <td data-label="Ending quantity"><input data-closing-quantity type="number" min="0" max="9999999999.99" step="0.01" aria-label="${label} ending quantity" value="${closing ? esc(closing.ending_quantity) : ""}"></td>
+      <td class="monthly-closing-actions" data-label="Action">
         <button type="button" class="small-action" data-closing-save>Save</button>
         ${closing ? `<button type="button" class="small-action" data-closing-clear>Clear</button>` : ""}
         <span data-closing-status role="status"></span>
