@@ -22,9 +22,15 @@ create table if not exists public.inventory_items (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   category text not null,
+  description text not null default '',
+  supplier text not null default '',
+  supplier_cost numeric(12,2) not null default 0 check (supplier_cost >= 0),
   brand text not null default '',
   variant text not null default '',
+  other_details text not null default '',
   sku text not null default '',
+  item_number integer check (item_number is null or item_number > 0),
+  begin_inventory numeric(12,2) not null default 0 check (begin_inventory >= 0),
   unit text not null default 'piece',
   quantity numeric(12,2) not null default 0 check (quantity >= 0),
   unit_price numeric(12,2) not null default 0 check (unit_price >= 0),
@@ -33,16 +39,64 @@ create table if not exists public.inventory_items (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.inventory_items add column if not exists description text not null default '';
+alter table public.inventory_items add column if not exists supplier text not null default '';
+alter table public.inventory_items add column if not exists supplier_cost numeric(12,2) not null default 0;
+alter table public.inventory_items add column if not exists other_details text not null default '';
+alter table public.inventory_items add column if not exists item_number integer;
+alter table public.inventory_items add column if not exists begin_inventory numeric(12,2) not null default 0;
+create unique index if not exists inventory_items_item_number_idx
+  on public.inventory_items(item_number) where item_number is not null;
+
+create table if not exists public.inventory_monitoring_snapshots (
+  item_id uuid primary key references public.inventory_items(id) on delete cascade,
+  total_in_items numeric(12,2) not null default 0,
+  purchase_cost_amount numeric(30,2) not null default 0,
+  sales_quantity numeric(12,2) not null default 0,
+  cost_of_goods_sold numeric(30,2) not null default 0,
+  sales_revenue numeric(30,2) not null default 0,
+  profit numeric(30,2) not null default 0,
+  damage_quantity numeric(12,2) not null default 0,
+  damage_amount numeric(30,2) not null default 0,
+  returns_quantity numeric(12,2) not null default 0,
+  returns_amount numeric(30,2) not null default 0,
+  credit_purchase_quantity numeric(12,2) not null default 0,
+  credit_purchase_amount numeric(30,2) not null default 0,
+  snapshot_updated_at timestamptz not null default now()
+);
+alter table public.inventory_monitoring_snapshots enable row level security;
 
 create table if not exists public.inventory_transactions (
   id uuid primary key default gen_random_uuid(),
   item_id uuid references public.inventory_items(id) on delete set null,
-  type text not null check (type in ('stock_in','stock_out','adjustment')),
+  type text not null,
   quantity numeric(12,2) not null check (quantity > 0),
   note text not null default '',
   balance_after numeric(12,2) not null check (balance_after >= 0),
+  supplier text not null default '',
+  invoice_number text not null default '',
+  purchase_type text check (purchase_type in ('cash','credit')),
+  due_date date,
+  unit_cost numeric(12,2) not null default 0 check (unit_cost >= 0),
+  total_amount numeric(30,2) not null default 0 check (total_amount >= 0),
+  amount_paid numeric(30,2) not null default 0 check (amount_paid >= 0),
+  created_by uuid,
   created_at timestamptz not null default now()
 );
+alter table public.inventory_transactions drop constraint if exists inventory_transactions_type_check;
+alter table public.inventory_transactions add constraint inventory_transactions_type_check
+  check (type in ('stock_in','stock_out','adjustment','purchase_cash','purchase_credit','damage','customer_return','supplier_return'));
+alter table public.inventory_transactions add column if not exists supplier text not null default '';
+alter table public.inventory_transactions add column if not exists invoice_number text not null default '';
+alter table public.inventory_transactions add column if not exists purchase_type text;
+alter table public.inventory_transactions add column if not exists due_date date;
+alter table public.inventory_transactions add column if not exists unit_cost numeric(12,2) not null default 0;
+alter table public.inventory_transactions add column if not exists total_amount numeric(30,2) not null default 0;
+alter table public.inventory_transactions add column if not exists amount_paid numeric(30,2) not null default 0;
+alter table public.inventory_transactions add column if not exists created_by uuid;
+alter table public.inventory_transactions drop constraint if exists inventory_transactions_purchase_type_check;
+alter table public.inventory_transactions add constraint inventory_transactions_purchase_type_check
+  check (purchase_type is null or purchase_type in ('cash','credit'));
 
 do $$
 begin
@@ -127,6 +181,32 @@ alter table public.accounts alter column username set not null;
 create unique index if not exists accounts_username_idx on public.accounts(username);
 alter table public.accounts alter column user_id set default gen_random_uuid();
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'inventory_transactions_created_by_fkey'
+      and conrelid = 'public.inventory_transactions'::regclass
+  ) then
+    alter table public.inventory_transactions
+      add constraint inventory_transactions_created_by_fkey
+      foreign key (created_by) references public.accounts(user_id) on delete set null;
+  end if;
+end
+$$;
+
+create table if not exists public.inventory_purchase_payments (
+  id uuid primary key default gen_random_uuid(),
+  transaction_id uuid not null references public.inventory_transactions(id) on delete cascade,
+  amount numeric(30,2) not null check (amount > 0),
+  note text not null default '',
+  recorded_by uuid references public.accounts(user_id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists inventory_purchase_payments_transaction_idx
+  on public.inventory_purchase_payments(transaction_id, created_at desc);
+alter table public.inventory_purchase_payments enable row level security;
+
 create table if not exists public.customers (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -167,7 +247,9 @@ create table if not exists public.client_orders (
   client_name text not null,
   client_email text not null default '',
   client_phone text not null default '',
+  client_address text not null default '',
   note text not null default '',
+  discount_total numeric(30,2) not null default 0 check (discount_total >= 0),
   total numeric(30,2) not null default 0 check (total >= 0),
   order_channel text not null default 'staff',
   ordered_by uuid references public.accounts(user_id) on delete set null,
@@ -176,6 +258,8 @@ create table if not exists public.client_orders (
 alter table public.client_orders add column if not exists receipt_number bigint generated by default as identity;
 alter table public.client_orders add column if not exists client_email text not null default '';
 alter table public.client_orders add column if not exists client_phone text not null default '';
+alter table public.client_orders add column if not exists client_address text not null default '';
+alter table public.client_orders add column if not exists discount_total numeric(30,2) not null default 0;
 alter table public.client_orders add column if not exists order_channel text not null default 'staff';
 create unique index if not exists client_orders_receipt_number_idx on public.client_orders(receipt_number);
 
@@ -187,8 +271,12 @@ create table if not exists public.client_order_items (
   unit text not null,
   quantity numeric(12,2) not null check (quantity > 0),
   unit_price numeric(12,2) not null check (unit_price >= 0),
-  line_total numeric(30,2) not null check (line_total >= 0)
+  line_total numeric(30,2) not null check (line_total >= 0),
+  unit_cost numeric(12,2) not null default 0 check (unit_cost >= 0),
+  cost_total numeric(30,2) not null default 0 check (cost_total >= 0)
 );
+alter table public.client_order_items add column if not exists unit_cost numeric(12,2) not null default 0;
+alter table public.client_order_items add column if not exists cost_total numeric(30,2) not null default 0;
 
 create index if not exists client_orders_created_idx on public.client_orders(created_at desc);
 create index if not exists client_order_items_order_idx on public.client_order_items(order_id);
@@ -224,15 +312,233 @@ where not exists (
 )
 group by orders.id, accounts.display_name, accounts.role;
 
+create or replace function public.add_inventory_stock(
+  p_item_id uuid,
+  p_added_quantity numeric,
+  p_note text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  item_row public.inventory_items%rowtype;
+  previous_quantity numeric(12,2);
+  next_quantity numeric(12,2);
+  stock_note text := trim(coalesce(p_note, ''));
+begin
+  if p_added_quantity is null or p_added_quantity <= 0 or p_added_quantity > 9999999999.99 then
+    raise exception 'Enter a valid quantity to add (must be greater than 0).' using errcode = 'P0001';
+  end if;
+  if length(stock_note) > 300 then
+    raise exception 'Stock note must be 300 characters or fewer.' using errcode = 'P0001';
+  end if;
+
+  select * into item_row
+  from public.inventory_items
+  where id = p_item_id
+  for update;
+  if not found then
+    raise exception 'Inventory item not found.' using errcode = 'P0001';
+  end if;
+
+  previous_quantity := item_row.quantity;
+  next_quantity := previous_quantity + p_added_quantity;
+  if next_quantity > 9999999999.99 then
+    raise exception 'The resulting stock exceeds the supported quantity range.' using errcode = 'P0001';
+  end if;
+
+  update public.inventory_items
+  set quantity = next_quantity, updated_at = now()
+  where id = p_item_id
+  returning * into item_row;
+
+  insert into public.inventory_transactions (item_id, type, quantity, note, balance_after)
+  values (
+    p_item_id,
+    'stock_in',
+    p_added_quantity,
+    case when stock_note = '' then 'Arrived stock added' else 'New stock arrived: ' || stock_note end,
+    next_quantity
+  );
+
+  return jsonb_build_object(
+    'item', to_jsonb(item_row),
+    'added', p_added_quantity,
+    'previous_quantity', previous_quantity,
+    'new_quantity', next_quantity
+  );
+end;
+$$;
+
+revoke all on function public.add_inventory_stock(uuid, numeric, text) from public;
+grant execute on function public.add_inventory_stock(uuid, numeric, text) to service_role;
+
+create or replace function public.record_inventory_event(
+  p_item_id uuid,
+  p_type text,
+  p_quantity numeric,
+  p_unit_cost numeric,
+  p_supplier text,
+  p_invoice_number text,
+  p_due_date date,
+  p_amount_paid numeric,
+  p_note text,
+  p_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  item_row public.inventory_items%rowtype;
+  transaction_row public.inventory_transactions%rowtype;
+  previous_quantity numeric(12,2);
+  next_quantity numeric(12,2);
+  event_total numeric(30,2);
+  paid numeric(30,2);
+begin
+  if p_type not in ('purchase_cash','purchase_credit','damage','customer_return','supplier_return') then
+    raise exception 'Choose a supported purchase, damage, or return type.' using errcode = 'P0001';
+  end if;
+  if p_quantity is null or p_quantity <= 0 or p_quantity > 9999999999.99 then
+    raise exception 'Quantity must be greater than zero and within the supported range.' using errcode = 'P0001';
+  end if;
+  if length(trim(coalesce(p_supplier, ''))) > 120
+    or length(trim(coalesce(p_invoice_number, ''))) > 120
+    or length(trim(coalesce(p_note, ''))) > 500 then
+    raise exception 'Supplier, invoice, or note exceeds the supported length.' using errcode = 'P0001';
+  end if;
+
+  select * into item_row
+  from public.inventory_items
+  where id = p_item_id
+  for update;
+  if not found then
+    raise exception 'Inventory item not found.' using errcode = 'P0001';
+  end if;
+
+  if coalesce(p_unit_cost, item_row.supplier_cost) < 0
+    or coalesce(p_unit_cost, item_row.supplier_cost) > 9999999999.99 then
+    raise exception 'Unit cost must be zero or greater.' using errcode = 'P0001';
+  end if;
+
+  previous_quantity := item_row.quantity;
+  event_total := round(coalesce(p_unit_cost, item_row.supplier_cost) * p_quantity, 2);
+  paid := coalesce(p_amount_paid, 0);
+  if p_type = 'purchase_cash' then
+    paid := event_total;
+  elsif p_type = 'purchase_credit' and (paid < 0 or paid > event_total) then
+    raise exception 'Initial payment must be between zero and the purchase total.' using errcode = 'P0001';
+  elsif p_type not in ('purchase_cash','purchase_credit') then
+    paid := 0;
+  end if;
+  if p_type = 'purchase_credit' and paid < event_total and p_due_date is null then
+    raise exception 'A due date is required for an unpaid credit purchase.' using errcode = 'P0001';
+  end if;
+
+  if p_type in ('purchase_cash','purchase_credit','customer_return') then
+    next_quantity := item_row.quantity + p_quantity;
+  else
+    next_quantity := item_row.quantity - p_quantity;
+    if next_quantity < 0 then
+      raise exception 'Not enough stock for this damage or return.' using errcode = 'P0001';
+    end if;
+  end if;
+  if next_quantity > 9999999999.99 then
+    raise exception 'The resulting stock exceeds the supported quantity range.' using errcode = 'P0001';
+  end if;
+
+  update public.inventory_items
+  set quantity = next_quantity, updated_at = now()
+  where id = p_item_id
+  returning * into item_row;
+
+  insert into public.inventory_transactions (
+    item_id, type, quantity, note, balance_after, supplier, invoice_number,
+    purchase_type, due_date, unit_cost, total_amount, amount_paid, created_by
+  )
+  values (
+    p_item_id, p_type, p_quantity, trim(coalesce(p_note, '')), next_quantity,
+    trim(coalesce(p_supplier, '')), trim(coalesce(p_invoice_number, '')),
+    case when p_type = 'purchase_cash' then 'cash' when p_type = 'purchase_credit' then 'credit' else null end,
+    p_due_date, coalesce(p_unit_cost, item_row.supplier_cost), event_total, paid, p_user_id
+  )
+  returning * into transaction_row;
+
+  if p_type = 'purchase_credit' and paid > 0 then
+    insert into public.inventory_purchase_payments (transaction_id, amount, note, recorded_by)
+    values (transaction_row.id, paid, 'Initial payment', p_user_id);
+  end if;
+
+  return jsonb_build_object(
+    'item', to_jsonb(item_row),
+    'transaction', to_jsonb(transaction_row),
+    'previous_quantity', previous_quantity,
+    'new_quantity', next_quantity
+  );
+end;
+$$;
+
+revoke all on function public.record_inventory_event(uuid, text, numeric, numeric, text, text, date, numeric, text, uuid) from public;
+grant execute on function public.record_inventory_event(uuid, text, numeric, numeric, text, text, date, numeric, text, uuid) to service_role;
+
+create or replace function public.record_inventory_purchase_payment(
+  p_transaction_id uuid,
+  p_amount numeric,
+  p_note text,
+  p_user_id uuid
+)
+returns public.inventory_transactions
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  purchase_row public.inventory_transactions%rowtype;
+begin
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'Payment amount must be greater than zero.' using errcode = 'P0001';
+  end if;
+  select * into purchase_row
+  from public.inventory_transactions
+  where id = p_transaction_id and type = 'purchase_credit'
+  for update;
+  if not found then
+    raise exception 'Credit purchase not found.' using errcode = 'P0001';
+  end if;
+  if purchase_row.amount_paid + p_amount > purchase_row.total_amount then
+    raise exception 'Payment exceeds the remaining balance.' using errcode = 'P0001';
+  end if;
+
+  update public.inventory_transactions
+  set amount_paid = amount_paid + p_amount
+  where id = p_transaction_id
+  returning * into purchase_row;
+  insert into public.inventory_purchase_payments (transaction_id, amount, note, recorded_by)
+  values (p_transaction_id, p_amount, trim(coalesce(p_note, '')), p_user_id);
+  return purchase_row;
+end;
+$$;
+
+revoke all on function public.record_inventory_purchase_payment(uuid, numeric, text, uuid) from public;
+grant execute on function public.record_inventory_purchase_payment(uuid, numeric, text, uuid) to service_role;
+
 drop function if exists public.place_client_order(text, text, jsonb, uuid);
 drop function if exists public.place_client_order(text, text, text, text, jsonb, uuid);
+drop function if exists public.place_client_order(text, text, text, text, text, jsonb, uuid);
+drop function if exists public.place_client_order(text, text, text, text, text, jsonb, uuid, numeric);
 create function public.place_client_order(
   p_client_name text,
   p_client_email text,
   p_client_phone text,
+  p_client_address text,
   p_note text,
   p_items jsonb,
-  p_user_id uuid
+  p_user_id uuid,
+  p_discount numeric default 0
 )
 returns uuid
 language plpgsql
@@ -243,6 +549,7 @@ declare
   saved_order_id uuid;
   order_total numeric(30,2) := 0;
   line_total numeric(30,2);
+  line_cost numeric(30,2);
   order_line record;
   item_row public.inventory_items%rowtype;
   next_quantity numeric(12,2);
@@ -253,6 +560,9 @@ begin
   if length(coalesce(p_client_email, '')) > 254 or length(coalesce(p_client_phone, '')) > 24 then
     raise exception 'Client contact details exceed the supported length.' using errcode = 'P0001';
   end if;
+  if length(trim(coalesce(p_client_address, ''))) not between 1 and 300 then
+    raise exception 'Client address is required and must be 300 characters or fewer.' using errcode = 'P0001';
+  end if;
   if p_items is null or jsonb_typeof(p_items) <> 'array' then
     raise exception 'Add at least one item to the order.' using errcode = 'P0001';
   end if;
@@ -260,10 +570,10 @@ begin
     raise exception 'Add at least one item to the order.' using errcode = 'P0001';
   end if;
 
-  insert into public.client_orders (client_name, client_email, client_phone, note, ordered_by, order_channel)
+  insert into public.client_orders (client_name, client_email, client_phone, client_address, note, discount_total, ordered_by, order_channel)
   values (
     trim(p_client_name), trim(coalesce(p_client_email, '')), trim(coalesce(p_client_phone, '')),
-    trim(coalesce(p_note, '')), p_user_id,
+    trim(p_client_address), trim(coalesce(p_note, '')), 0, p_user_id,
     case when p_user_id is null or exists (
       select 1 from public.accounts where user_id = p_user_id and role = 'customer'
     ) then 'online' else 'staff' end
@@ -293,15 +603,16 @@ begin
 
     next_quantity := item_row.quantity - order_line.quantity;
     line_total := round(item_row.unit_price * order_line.quantity, 2);
+    line_cost := round(item_row.supplier_cost * order_line.quantity, 2);
     update public.inventory_items
     set quantity = next_quantity, updated_at = now()
     where id = item_row.id;
 
     insert into public.client_order_items (
-      order_id, item_id, item_name, unit, quantity, unit_price, line_total
+      order_id, item_id, item_name, unit, quantity, unit_price, line_total, unit_cost, cost_total
     ) values (
       saved_order_id, item_row.id, item_row.name, item_row.unit, order_line.quantity,
-      item_row.unit_price, line_total
+      item_row.unit_price, line_total, item_row.supplier_cost, line_cost
     );
 
     insert into public.inventory_transactions (item_id, type, quantity, note, balance_after)
@@ -314,13 +625,18 @@ begin
     order_total := order_total + line_total;
   end loop;
 
-  update public.client_orders set total = order_total where id = saved_order_id;
+  if coalesce(p_discount, 0) < 0 or coalesce(p_discount, 0) > order_total then
+    raise exception 'Discount must be between zero and the order subtotal.' using errcode = 'P0001';
+  end if;
+  update public.client_orders
+  set discount_total = coalesce(p_discount, 0), total = order_total - coalesce(p_discount, 0)
+  where id = saved_order_id;
   return saved_order_id;
 end;
 $$;
 
-revoke all on function public.place_client_order(text, text, text, text, jsonb, uuid) from public;
-grant execute on function public.place_client_order(text, text, text, text, jsonb, uuid) to service_role;
+revoke all on function public.place_client_order(text, text, text, text, text, jsonb, uuid, numeric) from public;
+grant execute on function public.place_client_order(text, text, text, text, text, jsonb, uuid, numeric) to service_role;
 
 create index if not exists inventory_items_category_idx on public.inventory_items(category);
 create index if not exists inventory_items_name_idx on public.inventory_items(name);

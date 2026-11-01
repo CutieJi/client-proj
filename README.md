@@ -4,14 +4,21 @@ A modern, minimal inventory app for the handwritten building-material price list
 
 ## Included
 
-- Inventory table with search, category filter, and stock-level filter
-- Summary cards for item count, total stock units, estimated inventory value, and low-stock items
+- Inventory table matching the Masterfile Management item fields and item-number order, with live quantity linked to Inventory Monitoring
+- Summary cards for item count, total stock units, retail inventory value, supplier-cost value, and low-stock items
+- Inventory page and Add/Edit forms for Masterfile item number, SKU, item details, supplier cost, supplier, brand, other details, selling price, and reorder point; live stock remains linked to Inventory Monitoring
+- Separate Inventory Monitoring page matching the workbook's monitoring columns; both pages use the same inventory items, and imported spreadsheet totals remain the baseline while new app transactions are added
 - Add, edit, and delete material records
+- Add newly arrived stock to the existing quantity, with an atomic stock-in movement record
 - Stock-in, stock-out, and adjustment forms
 - Stock movement history
-- Client order entry with saved order history, order totals, automatic stock deductions, and required client name, email, and 11-digit phone details
+- Cash and credit purchase recording, supplier invoices, due dates, credit payment history, and automatic stock additions
+- Damage and supplier/customer return records with atomic stock-balance updates
+- Order discounts, cost-of-goods tracking, daily net sales/profit, and annual monthly purchase/sales summaries
+- Client order entry with saved order history, order totals, automatic stock deductions, and required client name, address, email, and 11-digit phone details
+- Customer database with addresses and a per-customer purchase history, including purchase dates, items, receipts, and totals
 - Staff order entry can select a registered customer to prefill their contact details or enter a new client
-- Export all saved orders and daily sales totals to an Excel workbook
+- Export saved customer orders, discounts, cost of goods sold, gross profit, and daily sales to an Excel workbook
 - Customer login by email or username and self-registration before ordering
 - Authenticated customer ordering page; orders are stored and deducted from stock atomically
 - Customer profile editing, password changes, and confirmed sign-out from the customer-page account menu
@@ -37,11 +44,20 @@ A modern, minimal inventory app for the handwritten building-material price list
 ## Setup
 
 1. In Supabase, open **SQL Editor** and run `supabase/schema.sql`.
-   If this is an existing installation, rerun the updated schema to add account contact columns, the customer role,
-   registration function, client-order storage, receipt references, and admin activity-log storage. Existing account
-   emails are preserved when present; accounts without an email or phone number must be completed by an administrator
-   before their details are current.
+   If this is an existing installation, rerun the updated schema to add inventory masterfile fields, purchase/payment
+   tracking, damage/return events, order discounts and cost-of-goods fields, customer addresses, and atomic inventory
+   operations, along with the existing account and activity-log migrations. Existing account emails are preserved when
+   present; accounts without an email or phone number must be completed by an administrator before their details are current.
 2. Optional: run `supabase/seed.sql` to insert the transcribed price list. The seed starts all quantities at `0` because the photo contains prices, not stock counts.
+   The optional `import_excel.js` or `import_excel.py` scripts load masterfile fields from
+   `%USERPROFILE%\Downloads\INVENTORY MAIN.xlsx`. Verify the workbook is current before running either script:
+   matching products are updated without resetting existing stock, new products use the workbook's beginning inventory,
+   and historical sales/customer/purchase transactions are not imported.
+   To load the linked workbook's complete item list, run `supabase/inventory_items.sql` after `supabase/schema.sql`.
+   It syncs items by SKU, preserves unrelated inventory rows, stores Masterfile item numbers and beginning balances,
+   loads current on-hand quantities and historical monitoring totals from Inventory Monitoring, and lets new app
+   transactions accumulate on top of that snapshot. Re-run the import only after the workbook includes activity since
+   the previous import, because it resets the monitoring baseline timestamp.
 3. Copy `.env.example` to `.env`.
 4. In Supabase **Project Settings → API**, copy the Project URL and the **service_role** key into `.env`:
 
@@ -67,7 +83,10 @@ A modern, minimal inventory app for the handwritten building-material price list
    npm start
    ```
 
-8. Visit `http://localhost:3000` to sign in or create a customer account. Customer accounts can submit orders after
+8. Visit `http://localhost:3000` to sign in or create a customer account. Admins can add received stock to an existing
+   balance or record supplier purchases; purchases, damage, and returns update inventory through database transactions.
+   Staff can record customer orders with discounts; the app stores the customer's name, address, date, and purchased items.
+   Customer accounts can submit orders after
    signing in. Staff can also sign in from this page using the admin username and password created in SQL; staff
    accounts are managed by admins from the **User management** page. Staff can access inventory and orders but not user
    management. The customer ordering page is

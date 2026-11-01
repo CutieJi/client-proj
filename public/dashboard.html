@@ -21,10 +21,30 @@
           <path d="M1 2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1zm7 0a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1zM1 10a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1zm7 0a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1z" />
         </svg></span> Inventory
       </button>
+      <button class="nav-link" data-view="inventory-monitoring">
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
+          <path d="M2 1h12a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1m1 3v2h3V4zm4 0v2h5V4zM3 7v2h3V7zm4 0v2h5V7zm-4 3v2h3v-2zm4 0v2h5v-2z"/>
+        </svg></span> Inventory Monitoring
+      </button>
       <button class="nav-link" data-view="transactions">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
           <path d="M14 8a.5.5 0 0 1-.5.5H3.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 0 1 .708.708L3.707 7.5H13.5A.5.5 0 0 1 14 8m-12-5a.5.5 0 0 1 .5-.5h9.793l-2.147-2.146a.5.5 0 0 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L12.293 3.5H2.5A.5.5 0 0 1 2 3" transform="translate(0 2)" />
         </svg></span> Stock movements
+      </button>
+      <button class="nav-link" data-view="purchases">
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
+          <path d="M2 2h12v2H2zm1 3h10l1 10H2zm3 2v1h4V7z"/>
+        </svg></span> Purchases / credit
+      </button>
+      <button class="nav-link" data-view="losses">
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
+          <path d="M8 1 1 14h14zm0 4 4.5 8h-9zM7.25 7h1.5v3h-1.5zm0 4h1.5v1.5h-1.5z"/>
+        </svg></span> Damage &amp; returns
+      </button>
+      <button class="nav-link" data-view="monthly">
+        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
+          <path d="M2 2h12v12H2zm2 2v2h2V4zm3 0v2h2V4zm3 0v2h2V4zM4 7v2h2V7zm3 0v2h2V7zm3 0v2h2V7zm-6 3v2h2v-2zm3 0v2h2v-2zm3 0v2h2v-2z"/>
+        </svg></span> Monthly summary
       </button>
       <button class="nav-link" data-view="orders">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
@@ -98,8 +118,12 @@
               id="stockUnits">—</strong><small>Across all items</small>
           </article>
           <article class="stat-card">
-            <div class="stat-top"><span>Inventory value</span></div><strong
-              id="inventoryValue">—</strong><small>Quantity × unit price</small>
+            <div class="stat-top"><span>Retail inventory</span></div><strong
+              id="inventoryValue">—</strong><small>Quantity × selling price</small>
+          </article>
+          <article class="stat-card">
+            <div class="stat-top"><span>Inventory cost value</span></div><strong
+              id="inventoryCostValue">—</strong><small>Quantity × supplier cost</small>
           </article>
           <article class="stat-card">
             <div class="stat-top"><span>Low stock</span><span class="stat-icon warning">!</span></div><strong
@@ -122,6 +146,14 @@
             <strong id="salesTotalItems">0</strong><small>Units deducted from inventory</small>
           </article>
           <article class="stat-card">
+            <div class="stat-top"><span>Total discounts</span></div>
+            <strong id="salesTotalDiscounts">₱0.00</strong><small>Discounts applied to orders</small>
+          </article>
+          <article class="stat-card">
+            <div class="stat-top"><span>Gross profit</span></div>
+            <strong id="salesGrossProfit">₱0.00</strong><small>Net sales less cost of goods sold</small>
+          </article>
+          <article class="stat-card">
             <div class="stat-top"><span>Today's sales</span></div>
             <strong id="salesTodayRevenue">₱0.00</strong><small id="salesTodayCount">0 orders today</small>
           </article>
@@ -132,7 +164,7 @@
           <div class="panel-header">
             <div>
               <h2 id="tableTitle">All materials</h2>
-              <p id="tableSubtitle">Review products and current stock quantities.</p>
+              <p id="tableSubtitle">Masterfile Management items in sheet order, linked to live Inventory Monitoring stock.</p>
             </div><button class="secondary-button" id="refreshBtn">↻ Refresh</button>
           </div>
           <div class="toolbar" id="inventoryToolbar"><label class="search-box"><span>⌕</span><input id="searchInput"
@@ -144,32 +176,76 @@
               <option value="low">Low stock only</option>
               <option value="available">In stock</option>
               <option value="empty">Out of stock</option>
-            </select><select id="inventoryDateSort" aria-label="Sort inventory by date">
-              <option value="newest">Date added: newest first</option>
-              <option value="oldest">Date added: oldest first</option>
             </select></div>
           <div class="table-wrap" id="tableWrap">
             <table>
               <thead>
                 <tr>
-                  <th>Material</th>
+                  <th>Item no#</th>
+                  <th>Product SKU/no#</th>
+                  <th>Items</th>
                   <th>Category</th>
-                  <th>SKU</th>
-                  <th>Quantity</th>
-                  <th>Unit price</th>
-                  <th>Date added</th>
+                  <th>Description</th>
+                  <th>Supplier cost</th>
+                  <th>Supplier</th>
+                  <th>Brands</th>
+                  <th>Other details</th>
+                  <th>Selling price</th>
+                  <th>Re-order point</th>
+                  <th>Current quantity</th>
                   <th>Stock status</th>
                   <th id="inventoryActionsHeader">Actions</th>
                 </tr>
               </thead>
               <tbody id="inventoryBody">
                 <tr>
-                  <td colspan="8" class="empty-cell">Loading inventory…</td>
+                  <td colspan="14" class="empty-cell">Loading inventory…</td>
                 </tr>
               </tbody>
             </table>
           </div>
+          <div class="table-pagination" id="pagination-inventory"></div>
           <div class="table-footer"><span id="rowCount">—</span><span>Prices in Philippine pesos (₱)</span></div>
+        </section>
+
+        <section class="panel hidden" id="inventoryMonitoringPanel">
+          <div class="stats-grid monitoring-stats-grid" id="monitoringStatsGrid">
+            <article class="stat-card"><div class="stat-top"><span>Total products</span></div><strong id="monitoringTotalItems">—</strong><small>SKU items from Masterfile</small></article>
+            <article class="stat-card"><div class="stat-top"><span>Current inventory</span></div><strong id="monitoringStockUnits">—</strong><small>Units currently on hand</small></article>
+            <article class="stat-card"><div class="stat-top"><span>Current retail amount</span></div><strong id="monitoringRetailAmount">—</strong><small>Current stock × selling price</small></article>
+            <article class="stat-card"><div class="stat-top"><span>Current cost value</span></div><strong id="monitoringCostValue">—</strong><small>Current stock × supplier cost</small></article>
+          </div>
+          <div class="panel-header">
+            <div><h2>Inventory Monitoring</h2><p>Masterfile item details with current stock, purchases, sales, damage, and returns.</p></div>
+            <button class="secondary-button" id="refreshInventoryMonitoringBtn" type="button">↻ Refresh</button>
+          </div>
+          <div class="toolbar">
+            <label class="search-box"><span>⌕</span><input id="monitoringSearchInput" type="search" placeholder="Search items, category, supplier, SKU..."></label>
+            <select id="monitoringCategoryFilter" aria-label="Filter inventory monitoring by category"><option value="all">All categories</option></select>
+            <select id="monitoringStockFilter" aria-label="Filter inventory monitoring by stock level">
+              <option value="all">All stock levels</option>
+              <option value="OUT OF STOCKS">Out of stocks</option>
+              <option value="RE-ORDER">Re-order</option>
+              <option value="MORE STOCKS">More stocks</option>
+            </select>
+          </div>
+          <div class="table-wrap inventory-monitoring-wrap">
+            <table class="inventory-monitoring-table">
+              <thead><tr>
+                <th>Item no#</th><th>Product SKU/no#</th><th>Items</th><th>Category</th><th>Description</th>
+                <th>Supplier Cost</th><th>Supplier</th><th>Brands</th><th>Other details</th><th>Selling Price</th>
+                <th>Re-order point</th><th>Current Retail Inventory</th><th>Current Retail Amount</th><th>Current cost Value Amount</th>
+                <th>Stock Level</th><th>Total In Items from purchases</th><th>Purchases Cost Amount</th>
+                <th>Total Sales (Inventory Out)</th><th>Cost of Good Sold</th><th>Sales revenue</th><th>Profit</th>
+                <th>Damage</th><th>Damage Amount</th><th>Returns</th><th>Return Amount</th><th>Quantity</th><th>Credit Purchase Amount</th>
+              </tr></thead>
+              <tbody id="inventoryMonitoringBody">
+                <tr><td colspan="27" class="empty-cell">Inventory monitoring data will appear here.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-pagination" id="pagination-inventory-monitoring"></div>
+          <div class="table-footer"><span id="monitoringRowCount">—</span><span>Inventory balances update from recorded purchases, sales, damage, and returns.</span></div>
         </section>
 
         <!-- STOCK MOVEMENTS / DEDUCTIONS PANEL -->
@@ -211,7 +287,46 @@
               </tbody>
             </table>
           </div>
+          <div class="table-pagination" id="pagination-transactions"></div>
           <div class="table-footer"><span>Showing stock changes and deductions</span></div>
+        </section>
+
+        <section class="panel hidden" id="purchasesPanel">
+          <div class="panel-header">
+            <div><h2>Cash and credit purchases</h2><p>Record supplier purchases and track credit balances and payments.</p></div>
+            <button class="primary-button hidden" id="newPurchaseBtn" type="button">＋ Record purchase</button>
+          </div>
+          <div class="table-wrap">
+            <table><thead><tr><th>Date</th><th>Material</th><th>Supplier / invoice</th><th>Type / due date</th><th>Quantity</th><th>Cost</th><th>Paid</th><th>Balance</th><th>Action</th></tr></thead>
+              <tbody id="purchasesBody"><tr><td colspan="9" class="empty-cell">Loading purchases…</td></tr></tbody></table>
+          </div>
+          <div class="table-pagination" id="pagination-purchases"></div>
+          <div class="table-footer"><span id="purchaseCount">—</span></div>
+        </section>
+
+        <section class="panel hidden" id="lossesPanel">
+          <div class="panel-header">
+            <div><h2>Damage and returned items</h2><p>Record damaged stock, supplier returns, and customer returns with stock balances updated automatically.</p></div>
+            <button class="primary-button hidden" id="newLossBtn" type="button">＋ Record damage / return</button>
+          </div>
+          <div class="table-wrap">
+            <table><thead><tr><th>Date</th><th>Material</th><th>Record type</th><th>Quantity</th><th>Cost value</th><th>Balance after</th><th>Note</th></tr></thead>
+              <tbody id="lossesBody"><tr><td colspan="7" class="empty-cell">Loading records…</td></tr></tbody></table>
+          </div>
+          <div class="table-pagination" id="pagination-losses"></div>
+          <div class="table-footer"><span id="lossCount">—</span></div>
+        </section>
+
+        <section class="panel hidden" id="monthlyPanel">
+          <div class="panel-header">
+            <div><h2>Monthly operating summary</h2><p>Purchases, sales, cost of goods sold, profit, returns, and damaged stock.</p></div>
+            <label class="field" style="max-width:140px;margin:0">Year<select id="summaryYear"></select></label>
+          </div>
+          <div class="table-wrap">
+            <table><thead><tr><th>Month</th><th>Cash purchases</th><th>Credit purchases</th><th>Credit payments</th><th>Sales</th><th>Discounts</th><th>COGS</th><th>Gross profit</th><th>Returns</th><th>Damaged</th></tr></thead>
+              <tbody id="monthlySummaryBody"><tr><td colspan="10" class="empty-cell">Loading monthly summary…</td></tr></tbody></table>
+          </div>
+          <div class="table-pagination" id="pagination-monthly"></div>
         </section>
 
         <!-- CLIENT ORDERS PANEL -->
@@ -232,6 +347,7 @@
               <tbody id="ordersBody"><tr><td colspan="5" class="empty-cell">Loading client orders…</td></tr></tbody>
             </table>
           </div>
+          <div class="table-pagination" id="pagination-orders"></div>
           <div class="table-footer"><span>Showing recent orders</span><span>Prices in Philippine pesos (₱)</span></div>
         </section>
 
@@ -246,19 +362,13 @@
           </div>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Orders count</th>
-                  <th>Items sold / deducted</th>
-                  <th>Total daily sales</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Date</th><th>Orders count</th><th>Items sold / deducted</th><th>Discounts</th><th>Net sales</th><th>COGS</th><th>Gross profit</th></tr></thead>
               <tbody id="dailySalesBody">
-                <tr><td colspan="4" class="empty-cell">Loading sales data…</td></tr>
+                <tr><td colspan="7" class="empty-cell">Loading sales data…</td></tr>
               </tbody>
             </table>
           </div>
+          <div class="table-pagination" id="pagination-sales"></div>
           <div class="table-footer"><span>Sales aggregated per calendar day</span><span>Prices in Philippine pesos (₱)</span></div>
         </section>
 
@@ -293,6 +403,7 @@
               </tbody>
             </table>
           </div>
+          <div class="table-pagination" id="pagination-customers"></div>
           <div class="table-footer"><span id="customerCount">—</span></div>
         </section>
 
@@ -322,6 +433,7 @@
               <tbody id="usersBody"><tr><td colspan="7" class="empty-cell">Loading accounts…</td></tr></tbody>
             </table>
           </div>
+          <div class="table-pagination" id="pagination-users"></div>
         </section>
 
         <!-- ACTIVITY LOGS PANEL (Admin Only) -->
@@ -339,6 +451,7 @@
               <tbody id="activityBody"><tr><td colspan="5" class="empty-cell">Loading activity logs…</td></tr></tbody>
             </table>
           </div>
+          <div class="table-pagination" id="pagination-activity"></div>
           <div class="table-footer"><span>Showing recent changes</span></div>
         </section>
 
@@ -359,46 +472,41 @@
       <form id="itemForm">
         <input type="hidden" id="itemId">
         <div class="form-grid">
-          <label class="field span-2">Material name *<input id="itemName" required maxlength="120"
+          <label class="field">Item no#<input id="itemNumber" type="number" min="1" step="1"
+              placeholder="Optional item number"></label>
+          <label class="field">Product SKU/no#<input id="itemSku" placeholder="Optional SKU"></label>
+          <label class="field span-2">Items *<input id="itemName" required maxlength="120"
               placeholder="e.g. Eagle Cement"></label>
-          <label class="field">Category *<select id="itemCategory" required>
-              <option value="">Select category</option>
-              <option>Cement</option>
-              <option>RSB</option>
-              <option>Aggregates</option>
-              <option>CHB</option>
-              <option>Tubulars</option>
-              <option>Plywood</option>
-              <option>Adhesives / Skimcoat</option>
-              <option>Paints</option>
-              <option>Pipes &amp; Fittings</option>
-              <option>Electrical</option>
-              <option>Hardware Items</option>
-              <option>Other</option>
-            </select></label>
-          <label class="field">Brand<input id="itemBrand" placeholder="e.g. Eagle, Kenneth"></label>
-          <label class="field">Variant / size<input id="itemVariant" placeholder="e.g. 10mm, 40kg, 1/4"></label>
-          <label class="field">SKU / item code<input id="itemSku" placeholder="Optional SKU"></label>
+          <label class="field">Category *<input id="itemCategory" list="itemCategories" required maxlength="80"
+              placeholder="e.g. Cement"><datalist id="itemCategories">
+              <option value="Cement"></option><option value="RSB"></option><option value="Aggregates"></option>
+              <option value="CHB"></option><option value="Tubulars"></option><option value="Plywood"></option>
+              <option value="Adhesives / Skimcoat"></option><option value="Paints"></option>
+              <option value="Pipes &amp; Fittings"></option><option value="Electrical"></option>
+              <option value="Hardware Items"></option><option value="Other"></option>
+            </datalist></label>
+          <label class="field span-2">Description<textarea id="itemDescription" rows="2"
+              placeholder="Description from Masterfile Management"></textarea></label>
+          <label class="field">Supplier cost (₱)<input id="itemSupplierCost" type="number" min="0" step="0.01" value="0"
+              required></label>
+          <label class="field">Supplier<input id="itemSupplier" maxlength="120" placeholder="Supplier name"></label>
+          <label class="field">Brands<input id="itemBrand" placeholder="e.g. Eagle, Kenneth"></label>
+          <label class="field">Other details<input id="itemOtherDetails" placeholder="Size or specifications"></label>
+          <label class="field">Selling price (₱) *<input id="itemPrice" type="number" min="0" step="0.01" value="0"
+              required></label>
+          <label class="field">Re-order point<input id="itemThreshold" type="number" min="0" step="1"
+              value="5"></label>
+          <label class="field">Current quantity *<input id="itemQuantity" type="number" min="0" step="0.01" value="0"
+              required></label>
           <label class="field">Unit<select id="itemUnit">
-              <option value="piece">piece</option>
-              <option value="bag">bag</option>
-              <option value="kilo">kilo</option>
-              <option value="length">length</option>
-              <option value="sheet">sheet</option>
-              <option value="box">box</option>
-              <option value="set">set</option>
-              <option value="drum">drum</option>
-              <option value="gallon">gallon</option>
+              <option value="piece">piece</option><option value="bag">bag</option><option value="kilo">kilo</option>
+              <option value="length">length</option><option value="sheet">sheet</option><option value="box">box</option>
+              <option value="set">set</option><option value="drum">drum</option><option value="gallon">gallon</option>
               <option value="meter">meter</option>
             </select></label>
-          <label class="field">Quantity in stock *<input id="itemQuantity" type="number" min="0" step="0.01" value="0"
-              required></label>
-          <label class="field">Unit price (₱) *<input id="itemPrice" type="number" min="0" step="0.01" value="0"
-              required></label>
-          <label class="field">Low-stock threshold<input id="itemThreshold" type="number" min="0" step="1"
-              value="5"></label>
+          <label class="field">Variant / size<input id="itemVariant" placeholder="e.g. 10mm, 40kg, 1/4"></label>
           <label class="field span-2">Notes<textarea id="itemNotes" rows="2"
-              placeholder="Optional supplier or storage details"></textarea></label>
+              placeholder="Optional storage or internal notes"></textarea></label>
         </div>
         <p class="form-error" id="itemError"></p>
         <div class="modal-actions"><button type="button" class="secondary-button"
@@ -482,6 +590,73 @@
     </section>
   </div>
 
+  <!-- RECORD SUPPLIER PURCHASE MODAL -->
+  <div class="modal-backdrop hidden" id="purchaseModal">
+    <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="purchaseModalTitle">
+      <div class="modal-heading">
+        <div><p class="eyebrow">SUPPLIER PURCHASE</p><h2 id="purchaseModalTitle">Record purchase</h2></div>
+        <button class="icon-button close-modal" data-close="purchaseModal" aria-label="Close">×</button>
+      </div>
+      <form id="purchaseForm">
+        <label class="field">Material *<select id="purchaseItem" required></select></label>
+        <label class="field">Purchase type *<select id="purchaseType" required>
+          <option value="cash">Cash purchase</option><option value="credit">Credit purchase</option>
+        </select></label>
+        <label class="field">Quantity received *<input id="purchaseQuantity" type="number" min="0.01" step="0.01" required></label>
+        <label class="field">Cost per unit (₱) *<input id="purchaseUnitCost" type="number" min="0" step="0.01" required></label>
+        <label class="field">Supplier<input id="purchaseSupplier" maxlength="120"></label>
+        <label class="field">Invoice / reference<input id="purchaseInvoice" maxlength="120"></label>
+        <label class="field hidden" id="purchasePaidField">Initial payment (₱)<input id="purchasePaid" type="number" min="0" step="0.01" value="0"></label>
+        <label class="field hidden" id="purchaseDueField">Credit due date<input id="purchaseDueDate" type="date"></label>
+        <label class="field">Note<textarea id="purchaseNote" rows="2" maxlength="500"></textarea></label>
+        <p class="form-error" id="purchaseError" role="alert"></p>
+        <div class="modal-actions"><button type="button" class="secondary-button" data-close="purchaseModal">Cancel</button>
+          <button type="submit" class="primary-button" id="savePurchaseBtn">Save purchase</button></div>
+      </form>
+    </section>
+  </div>
+
+  <!-- RECORD INVENTORY DAMAGE OR RETURN MODAL -->
+  <div class="modal-backdrop hidden" id="lossModal">
+    <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="lossModalTitle">
+      <div class="modal-heading">
+        <div><p class="eyebrow">INVENTORY EVENT</p><h2 id="lossModalTitle">Record damage / return</h2></div>
+        <button class="icon-button close-modal" data-close="lossModal" aria-label="Close">×</button>
+      </div>
+      <form id="lossForm">
+        <label class="field">Material *<select id="lossItem" required></select></label>
+        <label class="field">Record type *<select id="lossType" required>
+          <option value="damage">Damaged / write-off (remove stock)</option>
+          <option value="supplier_return">Return to supplier (remove stock)</option>
+          <option value="customer_return">Customer return (add stock)</option>
+        </select></label>
+        <label class="field">Quantity *<input id="lossQuantity" type="number" min="0.01" step="0.01" required></label>
+        <label class="field">Note<textarea id="lossNote" rows="2" maxlength="500"></textarea></label>
+        <p class="form-error" id="lossError" role="alert"></p>
+        <div class="modal-actions"><button type="button" class="secondary-button" data-close="lossModal">Cancel</button>
+          <button type="submit" class="primary-button" id="saveLossBtn">Save record</button></div>
+      </form>
+    </section>
+  </div>
+
+  <!-- CREDIT PURCHASE PAYMENT MODAL -->
+  <div class="modal-backdrop hidden" id="paymentModal">
+    <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="paymentModalTitle">
+      <div class="modal-heading">
+        <div><p class="eyebrow">CREDIT PAYMENT</p><h2 id="paymentModalTitle">Record payment</h2>
+          <p id="paymentBalanceText"></p></div>
+        <button class="icon-button close-modal" data-close="paymentModal" aria-label="Close">×</button>
+      </div>
+      <form id="paymentForm">
+        <label class="field">Payment amount (₱) *<input id="paymentAmount" type="number" min="0.01" step="0.01" required></label>
+        <label class="field">Note<input id="paymentNote" maxlength="300"></label>
+        <p class="form-error" id="paymentError" role="alert"></p>
+        <div class="modal-actions"><button type="button" class="secondary-button" data-close="paymentModal">Cancel</button>
+          <button type="submit" class="primary-button" id="savePaymentBtn">Save payment</button></div>
+      </form>
+    </section>
+  </div>
+
   <!-- RECORD CLIENT ORDER MODAL (Staff & Admin) -->
   <div class="modal-backdrop hidden" id="orderModal">
     <section class="modal" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">
@@ -502,15 +677,18 @@
         <label class="field"><span class="field-label">Phone number <span class="required-mark">*</span></span><input id="orderClientPhone" type="text"
             maxlength="11" autocomplete="tel" inputmode="numeric" pattern="[0-9]{11}" required
             placeholder="09123456789"><small>Enter exactly 11 digits.</small></label>
-        <label class="field"><span class="field-label">Delivery / Site address</span><input id="orderClientAddress" maxlength="300"
-            placeholder="Address ng customer o site delivery location"></label>
+        <label class="field"><span class="field-label">Delivery / Site address <span class="required-mark">*</span></span><input id="orderClientAddress" maxlength="300"
+            autocomplete="street-address" required placeholder="Address ng customer o site delivery location"></label>
         <div class="order-lines-heading">
           <strong>Order items (deducted from stock)</strong>
           <button class="secondary-button" id="addOrderLineBtn" type="button">＋ Add item</button>
         </div>
         <div id="orderLines" class="order-lines"></div>
+        <label class="field">Discount (₱)<input id="orderDiscount" type="number" min="0" step="0.01" value="0" required></label>
         <label class="field">Note<textarea id="orderNote" rows="2" maxlength="500"
             placeholder="Delivery address, project reference, or payment terms"></textarea></label>
+        <div class="order-total"><span>Order subtotal</span><strong id="orderSubtotal">₱0.00</strong></div>
+        <div class="order-total"><span>Discount</span><strong id="orderDiscountDisplay">₱0.00</strong></div>
         <div class="order-total"><span>Order total</span><strong id="orderTotal">₱0.00</strong></div>
         <p class="form-error" id="orderError" role="alert"></p>
         <div class="modal-actions"><button type="button" class="secondary-button"
@@ -559,8 +737,8 @@
             placeholder="09123456789"><small>Enter exactly 11 digits.</small></label>
         <label class="field"><span class="field-label">Email address</span><input id="custEmail" type="email" maxlength="254"
             autocomplete="email" placeholder="customer@example.com (optional)"></label>
-        <label class="field"><span class="field-label">Delivery address</span><textarea id="custAddress" rows="2" maxlength="300"
-            placeholder="Site address or delivery location"></textarea></label>
+        <label class="field"><span class="field-label">Delivery address <span class="required-mark">*</span></span><textarea id="custAddress" rows="2" maxlength="300"
+            required placeholder="Site address or delivery location"></textarea></label>
         <label class="field"><span class="field-label">Notes</span><textarea id="custNotes" rows="2" maxlength="500"
             placeholder="Special instructions, contact person, or terms"></textarea></label>
         <p class="form-error" id="customerError" role="alert"></p>
@@ -585,6 +763,56 @@
       <div class="modal-actions">
         <button type="button" class="secondary-button" data-close="customerDeleteModal">Cancel</button>
         <button type="button" class="danger-button" id="confirmCustomerDeleteBtn">Delete customer</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- CUSTOMER PURCHASE HISTORY MODAL -->
+  <div class="modal-backdrop hidden" id="customerPurchasesModal">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="customerPurchasesTitle" style="max-width:760px;">
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">CUSTOMER PURCHASE RECORD</p>
+          <h2 id="customerPurchasesTitle">Purchase History</h2>
+        </div>
+        <button class="icon-button close-modal" data-close="customerPurchasesModal" aria-label="Close">×</button>
+      </div>
+
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div>
+            <strong id="historyCustName" style="font-size:16px;color:#1e293b;display:block;">—</strong>
+            <span id="historyCustPhone" style="font-size:12px;color:#64748b;display:block;margin-top:2px;">—</span>
+            <span id="historyCustAddress" style="font-size:12px;color:#64748b;display:block;margin-top:2px;">—</span>
+          </div>
+          <div style="text-align:right;">
+            <span style="font-size:11px;color:#64748b;font-weight:700;">TOTAL PURCHASES</span>
+            <strong id="historyTotalPurchases" style="font-size:18px;color:#1e293b;display:block;">₱0.00</strong>
+            <small id="historyOrdersCount" style="color:#64748b;">0 orders</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date of purchase</th>
+              <th>Receipt reference</th>
+              <th>Purchased items</th>
+              <th>Total amount</th>
+              <th>Order note / Delivery</th>
+            </tr>
+          </thead>
+          <tbody id="customerPurchasesBody">
+            <tr><td colspan="5" class="empty-cell">Loading purchases…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-pagination" id="pagination-customer-purchases"></div>
+
+      <div class="modal-actions" style="margin-top:16px;">
+        <button type="button" class="secondary-button" data-close="customerPurchasesModal">Close</button>
       </div>
     </section>
   </div>

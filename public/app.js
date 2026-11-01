@@ -1,9 +1,15 @@
 const $ = (id) => document.getElementById(id);
 const state = {
   items: [],
+  inventoryMonitoring: [],
+  inventoryMonitoringTotals: null,
   transactions: [],
   orders: [],
   customers: [],
+  purchases: [],
+  losses: [],
+  activityLogs: [],
+  monthlySummary: [],
   users: [],
   salesSummary: null,
   user: null,
@@ -12,8 +18,11 @@ const state = {
   itemToDelete: null,
   customerToDelete: null,
   userToDelete: null,
+  purchaseToPay: null,
+  customerPurchaseHistory: null,
   orderLines: [],
-  nextOrderLineId: 1
+  nextOrderLineId: 1,
+  pagination: {}
 };
 
 const money = (n) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -42,6 +51,53 @@ function esc(value = "") {
   return String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
+function pageRows(key, rows) {
+  const pagination = state.pagination[key] || (state.pagination[key] = { page: 1, limit: 10 });
+  const pageCount = Math.max(1, Math.ceil(rows.length / pagination.limit));
+  pagination.page = Math.min(Math.max(1, pagination.page), pageCount);
+  const start = rows.length ? (pagination.page - 1) * pagination.limit : 0;
+  const end = Math.min(start + pagination.limit, rows.length);
+  const container = $(`pagination-${key}`);
+  if (container) {
+    container.innerHTML = `
+      <label>Rows per page
+        <select data-page-size aria-label="Rows per page">
+          ${[10, 25, 50, 100, 250].map(limit => `<option value="${limit}"${limit === pagination.limit ? " selected" : ""}>${limit}</option>`).join("")}
+        </select>
+      </label>
+      <div class="pagination-controls">
+        <span>${rows.length ? `Showing ${start + 1}–${end} of ${rows.length}` : "Showing 0 of 0"}</span>
+        <button type="button" class="secondary-button" data-page-prev ${pagination.page <= 1 ? "disabled" : ""}>Previous</button>
+        <span>Page ${pagination.page} of ${pageCount}</span>
+        <button type="button" class="secondary-button" data-page-next ${pagination.page >= pageCount ? "disabled" : ""}>Next</button>
+      </div>`;
+  }
+  return rows.slice(start, end);
+}
+
+function renderPage(key) {
+  const renderers = {
+    inventory: renderItems,
+    "inventory-monitoring": renderInventoryMonitoring,
+    transactions: renderTransactions,
+    purchases: renderPurchases,
+    losses: renderLosses,
+    monthly: renderMonthlySummary,
+    orders: renderOrders,
+    sales: renderDailySales,
+    customers: renderCustomers,
+    "customer-purchases": renderCustomerPurchases,
+    users: renderUsers,
+    activity: renderActivityLogs
+  };
+  renderers[key]?.();
+}
+
+function resetTablePage(key, renderer) {
+  if (state.pagination[key]) state.pagination[key].page = 1;
+  renderer();
+}
+
 function stockStatus(item) {
   const qty = Number(item.quantity), threshold = Number(item.low_stock_threshold);
   if (qty <= 0) return ["Out of stock", "stock-empty"];
@@ -57,22 +113,45 @@ async function loadAll() {
     $("totalItems").textContent = summary.totalItems.toLocaleString("en-PH");
     $("stockUnits").textContent = summary.stockUnits.toLocaleString("en-PH");
     $("inventoryValue").textContent = money(summary.inventoryValue);
+    $("inventoryCostValue").textContent = money(summary.inventoryCostValue);
     $("lowStock").textContent = summary.lowStock.toLocaleString("en-PH");
     renderCategories();
     renderItems();
     renderMovementOptions();
 
     if (state.view === "transactions") await loadTransactions();
+    if (state.view === "purchases") await loadPurchases();
+    if (state.view === "losses") await loadLosses();
+    if (state.view === "monthly") await loadMonthlySummary();
     if (state.view === "orders") await loadOrders();
     if (state.view === "sales") await loadSalesSummary();
     if (state.view === "customers") await loadCustomers();
+    if (state.view === "inventory-monitoring") await loadInventoryMonitoring();
   } catch (error) {
     if (error.status === 401) return window.location.replace("/");
     $("connectionText").textContent = "Connection issue";
-    $("inventoryBody").innerHTML = `<tr><td colspan="8" class="empty-cell">${esc(error.message)}</td></tr>`;
+    $("inventoryBody").innerHTML = `<tr><td colspan="14" class="empty-cell">${esc(error.message)}</td></tr>`;
     $("rowCount").textContent = "Unable to load";
-    ["totalItems", "stockUnits", "inventoryValue", "lowStock"].forEach(id => $(id).textContent = "—");
+    ["totalItems", "stockUnits", "inventoryValue", "inventoryCostValue", "lowStock"].forEach(id => $(id).textContent = "—");
   }
+}
+
+function updateAddStockPreview(item) {
+  const added = Number($("addStockQty").value);
+  $("addStockNewTotal").textContent = Number.isFinite(added) && added > 0
+    ? `${(Number(item.quantity) + added).toLocaleString("en-PH")} ${item.unit}`
+    : "—";
+}
+
+function openAddStockModal(item) {
+  $("addStockForm").reset();
+  $("addStockItemId").value = item.id;
+  $("addStockItemName").textContent = `${item.name}${item.variant ? ` · ${item.variant}` : ""}`;
+  $("addStockCurrentQty").textContent = `${Number(item.quantity).toLocaleString("en-PH")} ${item.unit}`;
+  $("addStockNewTotal").textContent = "—";
+  $("addStockError").textContent = "";
+  updateAddStockPreview(item);
+  openModal("addStockModal");
 }
 
 // INVENTORY
@@ -89,46 +168,135 @@ function renderItems() {
   const isAdmin = state.user?.role === "admin";
 
   const rows = state.items.filter(item => {
-    const haystack = [item.name, item.brand, item.variant, item.sku, item.category].join(" ").toLowerCase();
+    const haystack = [item.item_number, item.name, item.description, item.supplier, item.other_details, item.brand, item.variant, item.sku, item.category].join(" ").toLowerCase();
     const status = stockStatus(item)[0];
     return (!search || haystack.includes(search)) && (category === "All categories" || item.category === category) &&
       (stock === "all" || (stock === "low" && status !== "In stock") || (stock === "available" && Number(item.quantity) > 0) || (stock === "empty" && Number(item.quantity) <= 0));
   });
 
-  const direction = $("inventoryDateSort").value === "oldest" ? 1 : -1;
-  rows.sort((a, b) => direction * ((Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0)));
+  rows.sort((a, b) => {
+    const aNumber = Number(a.item_number) || Number.MAX_SAFE_INTEGER;
+    const bNumber = Number(b.item_number) || Number.MAX_SAFE_INTEGER;
+    return aNumber - bNumber || String(a.sku || "").localeCompare(String(b.sku || ""), undefined, { numeric: true, sensitivity: "base" });
+  });
+  const visibleRows = pageRows("inventory", rows);
 
   $("inventoryActionsHeader").textContent = isAdmin ? "Actions" : "Status / Permissions";
 
-  $("inventoryBody").innerHTML = rows.length ? rows.map(item => {
+  $("inventoryBody").innerHTML = rows.length ? visibleRows.map(item => {
     const [status, cls] = stockStatus(item);
     const actionsHtml = isAdmin
       ? `<div class="row-actions">
+           <button class="small-action" data-action="add-stock" data-id="${item.id}" style="font-weight:700;color:#237a55;background:#eaf6ef;border:1px solid #c9ecda;">＋ Add stock</button>
            <button class="small-action" data-action="edit" data-id="${item.id}">Edit</button>
-           <button class="small-action" data-action="move" data-id="${item.id}">Stock</button>
            <button class="small-action" data-action="delete" data-id="${item.id}">Delete</button>
          </div>`
       : `<span style="color:#7b8492;font-size:11px;">View only (Staff)</span>`;
 
     return `<tr>
-      <td><div class="material-name">${esc(item.name)}</div><div class="material-meta">${esc([item.brand, item.variant].filter(Boolean).join(" · ") || "Standard")}</div></td>
-      <td><span class="category-pill">${esc(item.category)}</span></td>
+      <td>${item.item_number ? esc(item.item_number) : "—"}</td>
       <td>${esc(item.sku || "—")}</td>
-      <td class="quantity-cell">${Number(item.quantity).toLocaleString("en-PH")} <span style="font-weight:400;color:#8993a1">${esc(item.unit)}</span></td>
+      <td><div class="material-name">${esc(item.name)}</div>${item.variant ? `<div class="material-meta">${esc(item.variant)}</div>` : ""}</td>
+      <td><span class="category-pill">${esc(item.category)}</span></td>
+      <td>${esc(item.description || "—")}</td>
+      <td class="price-cell">${money(item.supplier_cost)}</td>
+      <td>${esc(item.supplier || "—")}</td>
+      <td>${esc(item.brand || "—")}</td>
+      <td>${esc(item.other_details || "—")}</td>
       <td class="price-cell">${money(item.unit_price)}</td>
-      <td>${esc(dateOnly(item.created_at))}</td>
+      <td>${Number(item.low_stock_threshold).toLocaleString("en-PH")}</td>
+      <td class="quantity-cell">${Number(item.quantity).toLocaleString("en-PH")} <span style="font-weight:400;color:#8993a1">${esc(item.unit)}</span></td>
       <td><span class="stock-badge ${cls}">${status}</span></td>
       <td>${actionsHtml}</td>
     </tr>`;
-  }).join("") : `<tr><td colspan="8" class="empty-cell">No materials match your filters.</td></tr>`;
+  }).join("") : `<tr><td colspan="14" class="empty-cell">No materials match your filters.</td></tr>`;
 
-  $("rowCount").textContent = `Showing ${rows.length} of ${state.items.length} items`;
+  $("rowCount").textContent = `${rows.length} matching items`;
+}
+
+async function loadInventoryMonitoring() {
+  try {
+    const result = await api("/api/inventory-monitoring");
+    state.inventoryMonitoring = result.items;
+    state.inventoryMonitoringTotals = result.totals;
+    $("monitoringTotalItems").textContent = Number(result.totals.itemCount).toLocaleString("en-PH");
+    $("monitoringStockUnits").textContent = Number(result.totals.stockUnits).toLocaleString("en-PH");
+    $("monitoringRetailAmount").textContent = money(result.totals.retailAmount);
+    $("monitoringCostValue").textContent = money(result.totals.costValue);
+    renderInventoryMonitoringCategories();
+    renderInventoryMonitoring();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("inventoryMonitoringBody").innerHTML = `<tr><td colspan="27" class="empty-cell">${esc(error.message)}</td></tr>`;
+    $("monitoringRowCount").textContent = "Unable to load inventory monitoring data";
+  }
+}
+
+function renderInventoryMonitoringCategories() {
+  const select = $("monitoringCategoryFilter");
+  const current = select.value || "all";
+  const categories = [...new Set(state.inventoryMonitoring.map(item => item.category).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  select.innerHTML = `<option value="all">All categories</option>${categories.map(category =>
+    `<option value="${esc(category)}">${esc(category)}</option>`
+  ).join("")}`;
+  select.value = categories.includes(current) ? current : "all";
+}
+
+function renderInventoryMonitoring() {
+  const search = $("monitoringSearchInput").value.trim().toLowerCase();
+  const category = $("monitoringCategoryFilter").value;
+  const stockLevel = $("monitoringStockFilter").value;
+  const rows = state.inventoryMonitoring.filter(item => {
+    const text = [item.item_number, item.sku, item.name, item.category, item.description, item.supplier, item.brand, item.other_details]
+      .join(" ").toLowerCase();
+    return (!search || text.includes(search))
+      && (category === "all" || item.category === category)
+      && (stockLevel === "all" || item.stock_level === stockLevel);
+  });
+  rows.sort((a, b) => Number(a.item_number || Number.MAX_SAFE_INTEGER) - Number(b.item_number || Number.MAX_SAFE_INTEGER)
+    || String(a.sku || "").localeCompare(String(b.sku || ""), undefined, { numeric: true, sensitivity: "base" }));
+  const visibleRows = pageRows("inventory-monitoring", rows);
+  const quantity = value => Number(value || 0).toLocaleString("en-PH");
+  const rowCell = (value, css = "") => `<td${css ? ` class="${css}"` : ""}>${value}</td>`;
+  $("inventoryMonitoringBody").innerHTML = rows.length ? visibleRows.map(item => `<tr>
+    ${rowCell(item.item_number ? esc(item.item_number) : "—")}
+    ${rowCell(esc(item.sku || "—"))}
+    ${rowCell(`<strong>${esc(item.name)}</strong>`)}
+    ${rowCell(esc(item.category))}
+    ${rowCell(esc(item.description || "—"))}
+    ${rowCell(money(item.supplier_cost), "price-cell")}
+    ${rowCell(esc(item.supplier || "—"))}
+    ${rowCell(esc(item.brand || "—"))}
+    ${rowCell(esc(item.other_details || "—"))}
+    ${rowCell(money(item.unit_price), "price-cell")}
+    ${rowCell(quantity(item.low_stock_threshold))}
+    ${rowCell(quantity(item.quantity))}
+    ${rowCell(money(item.retail_amount), "price-cell")}
+    ${rowCell(money(item.inventory_cost_value), "price-cell")}
+    ${rowCell(`<span class="stock-badge ${item.stock_level === "OUT OF STOCKS" ? "stock-empty" : item.stock_level === "RE-ORDER" ? "stock-low" : "stock-good"}">${esc(item.stock_level)}</span>`)}
+    ${rowCell(quantity(item.total_in_items))}
+    ${rowCell(money(item.purchase_cost_amount), "price-cell")}
+    ${rowCell(quantity(item.sales_quantity))}
+    ${rowCell(money(item.cost_of_goods_sold), "price-cell")}
+    ${rowCell(money(item.sales_revenue), "price-cell")}
+    ${rowCell(money(item.profit), "price-cell")}
+    ${rowCell(quantity(item.damage_quantity))}
+    ${rowCell(money(item.damage_amount), "price-cell")}
+    ${rowCell(quantity(item.returns_quantity))}
+    ${rowCell(money(item.returns_amount), "price-cell")}
+    ${rowCell(quantity(item.credit_purchase_quantity))}
+    ${rowCell(money(item.credit_purchase_amount), "price-cell")}
+  </tr>`).join("") : `<tr><td colspan="27" class="empty-cell">No inventory items match these filters.</td></tr>`;
+  $("monitoringRowCount").textContent = `Showing ${rows.length} of ${state.inventoryMonitoring.length} inventory items`;
 }
 
 function resetItemForm() {
   $("itemForm").reset();
   $("itemId").value = "";
+  $("itemNumber").value = "";
   $("itemQuantity").value = "0";
+  $("itemSupplierCost").value = "0";
   $("itemPrice").value = "0";
   $("itemThreshold").value = "5";
   $("modalTitle").textContent = "Add material";
@@ -142,15 +310,20 @@ function editItem(item) {
   $("saveItemBtn").textContent = "Save changes";
   $("itemId").value = item.id;
   const map = {
+    itemNumber: "item_number",
     itemName: "name",
     itemCategory: "category",
     itemBrand: "brand",
     itemVariant: "variant",
     itemSku: "sku",
+    itemSupplier: "supplier",
     itemUnit: "unit",
     itemQuantity: "quantity",
+    itemSupplierCost: "supplier_cost",
     itemPrice: "unit_price",
     itemThreshold: "low_stock_threshold",
+    itemDescription: "description",
+    itemOtherDetails: "other_details",
     itemNotes: "notes"
   };
   Object.entries(map).forEach(([id, key]) => $(id).value = item[key] ?? "");
@@ -186,8 +359,9 @@ function renderTransactions() {
   const rows = state.transactions.filter(x => typeFilter === "all" || x.type === typeFilter);
   const direction = $("movementDateSort").value === "oldest" ? 1 : -1;
   rows.sort((a, b) => direction * ((Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0)));
+  const visibleRows = pageRows("transactions", rows);
 
-  $("transactionsBody").innerHTML = rows.length ? rows.map(x => {
+  $("transactionsBody").innerHTML = rows.length ? visibleRows.map(x => {
     const movementLabel = {
       stock_in: "Stock in (+)",
       stock_out: "Stock out / Deducted (-)",
@@ -208,12 +382,116 @@ function renderTransactions() {
   }).join("") : `<tr><td colspan="6" class="empty-cell">No stock movements found matching filter.</td></tr>`;
 }
 
+function inventoryOptions(selectedId = "") {
+  return `<option value="">Select a material</option>` + state.items.map(item =>
+    `<option value="${esc(item.id)}"${String(item.id) === String(selectedId) ? " selected" : ""}>${esc(item.name)}${item.variant ? ` · ${esc(item.variant)}` : ""} (stock: ${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)})</option>`
+  ).join("");
+}
+
+async function loadPurchases() {
+  try {
+    state.purchases = await api("/api/purchases");
+    renderPurchases();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("purchasesBody").innerHTML = `<tr><td colspan="9" class="empty-cell">${esc(error.message)}</td></tr>`;
+    $("purchaseCount").textContent = "Unable to load";
+  }
+}
+
+function renderPurchases() {
+    const rows = pageRows("purchases", state.purchases);
+    const isAdmin = state.user?.role === "admin";
+    $("purchasesBody").innerHTML = state.purchases.length ? rows.map(purchase => {
+      const balance = Math.max(0, Number(purchase.total_amount) - Number(purchase.amount_paid));
+      const payments = (purchase.inventory_purchase_payments || []).reduce((sum, payment) => sum + Number(payment.amount), 0);
+      return `<tr>
+        <td>${esc(dateTime(purchase.created_at))}</td>
+        <td><div class="material-name">${esc(purchase.inventory_items?.name || "Deleted item")}</div><div class="material-meta">${Number(purchase.quantity).toLocaleString("en-PH")} ${esc(purchase.inventory_items?.unit || "")}</div></td>
+        <td>${esc(purchase.supplier || "—")}<div class="material-meta">${esc(purchase.invoice_number || "No invoice")}</div></td>
+        <td><span class="category-pill">${purchase.type === "purchase_credit" ? "Credit" : "Cash"}</span>${purchase.due_date ? `<div class="material-meta">Due ${esc(dateOnly(purchase.due_date))}</div>` : ""}</td>
+        <td>${Number(purchase.quantity).toLocaleString("en-PH")}</td>
+        <td class="price-cell">${money(purchase.total_amount)}</td>
+        <td class="price-cell">${money(purchase.amount_paid)}${payments > Number(purchase.amount_paid) ? `<div class="material-meta">Payments logged: ${money(payments)}</div>` : ""}</td>
+        <td class="price-cell">${money(balance)}</td>
+        <td>${isAdmin && balance > 0 ? `<button class="small-action" data-purchase-payment="${esc(purchase.id)}">Record payment</button>` : "—"}</td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="9" class="empty-cell">No purchases recorded yet.</td></tr>`;
+    $("purchaseCount").textContent = `Showing ${state.purchases.length} purchase records`;
+}
+
+async function loadLosses() {
+  try {
+    state.losses = await api("/api/damage-returns");
+    renderLosses();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("lossesBody").innerHTML = `<tr><td colspan="7" class="empty-cell">${esc(error.message)}</td></tr>`;
+    $("lossCount").textContent = "Unable to load";
+  }
+}
+
+function renderLosses() {
+    const labels = { damage: "Damage / write-off", customer_return: "Customer return", supplier_return: "Supplier return" };
+    const rows = pageRows("losses", state.losses);
+    $("lossesBody").innerHTML = state.losses.length ? rows.map(event => `<tr>
+      <td>${esc(dateTime(event.created_at))}</td>
+      <td><div class="material-name">${esc(event.inventory_items?.name || "Deleted item")}</div><div class="material-meta">${esc(event.inventory_items?.sku || "")}</div></td>
+      <td><span class="category-pill">${labels[event.type] || esc(event.type)}</span></td>
+      <td>${Number(event.quantity).toLocaleString("en-PH")} ${esc(event.inventory_items?.unit || "")}</td>
+      <td class="price-cell">${money(event.total_amount)}</td>
+      <td>${Number(event.balance_after).toLocaleString("en-PH")}</td>
+      <td>${esc(event.note || "—")}</td>
+    </tr>`).join("") : `<tr><td colspan="7" class="empty-cell">No damage or return records yet.</td></tr>`;
+    $("lossCount").textContent = `Showing ${state.losses.length} records`;
+}
+
+async function loadMonthlySummary() {
+  try {
+    const year = $("summaryYear").value || String(new Date().getFullYear());
+    const result = await api(`/api/management-summary?year=${encodeURIComponent(year)}`);
+    state.monthlySummary = result.months;
+    renderMonthlySummary();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("monthlySummaryBody").innerHTML = `<tr><td colspan="10" class="empty-cell">${esc(error.message)}</td></tr>`;
+  }
+}
+
+function renderMonthlySummary() {
+    const resultYear = Number($("summaryYear").value || new Date().getFullYear());
+    const rows = pageRows("monthly", state.monthlySummary);
+    const monthNames = new Intl.DateTimeFormat("en", { month: "long", timeZone: "UTC" });
+    $("monthlySummaryBody").innerHTML = rows.map(entry => `<tr>
+      <td><strong>${monthNames.format(new Date(Date.UTC(resultYear, entry.month - 1, 1)))}</strong></td>
+      <td class="price-cell">${money(entry.cashPurchases)}</td>
+      <td class="price-cell">${money(entry.creditPurchases)}</td>
+      <td class="price-cell">${money(entry.creditPayments)}</td>
+      <td class="price-cell">${money(entry.sales)}</td>
+      <td class="price-cell">${money(entry.discounts)}</td>
+      <td class="price-cell">${money(entry.costOfGoodsSold)}</td>
+      <td class="price-cell">${money(entry.grossProfit)}</td>
+      <td>${Number(entry.returnsQty).toLocaleString("en-PH")} <span class="material-meta">${money(entry.returnsAmount)}</span></td>
+      <td>${Number(entry.damagedQty).toLocaleString("en-PH")} <span class="material-meta">${money(entry.damageAmount)}</span></td>
+    </tr>`).join("");
+}
+
 // CLIENT ORDERS
 async function loadOrders() {
   try {
     const orders = await api("/api/orders");
     state.orders = orders;
-    $("ordersBody").innerHTML = orders.length ? orders.map(order => {
+    renderOrders();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("ordersBody").innerHTML = `<tr><td colspan="5" class="empty-cell">${esc(error.message)}</td></tr>`;
+  }
+}
+
+function renderOrders() {
+    const orders = state.orders;
+    const visibleOrders = pageRows("orders", orders);
+    $("ordersBody").innerHTML = orders.length ? visibleOrders.map(order => {
       const items = order.client_order_items || [];
       const itemSummary = items.map(item => `<div class="material-name">${esc(item.item_name)} · <strong>${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)}</strong></div><div class="material-meta">${money(item.line_total)}</div>`).join("");
       const orderNote = order.note ? `<div class="material-meta">${esc(order.note)}</div>` : "";
@@ -222,14 +500,10 @@ async function loadOrders() {
         <td>${esc(dateTime(order.created_at))}<div class="material-meta">${esc(`OR-${String(order.receipt_number).padStart(8, "0")}`)}</div></td>
         <td><div class="material-name">${esc(order.client_name)}</div>${contactDetails ? `<div class="material-meta">${contactDetails}</div>` : ""}${orderNote}</td>
         <td>${itemSummary}</td>
-        <td class="price-cell">${money(order.total)}</td>
+        <td class="price-cell">${money(order.total)}${Number(order.discount_total) > 0 ? `<div class="material-meta">Discount: ${money(order.discount_total)}</div>` : ""}</td>
         <td>${esc(order.ordered_by_account?.display_name || "Staff")}</td>
       </tr>`;
     }).join("") : `<tr><td colspan="5" class="empty-cell">No client orders yet. Staff can record orders to deduct stock.</td></tr>`;
-  } catch (error) {
-    if (error.status === 401) return window.location.replace("/");
-    $("ordersBody").innerHTML = `<tr><td colspan="5" class="empty-cell">${esc(error.message)}</td></tr>`;
-  }
 }
 
 function renderOrderLines() {
@@ -262,7 +536,10 @@ function updateOrderTotal() {
     const item = state.items.find(product => String(product.id) === itemId);
     return item ? sum + Math.round(Number(item.unit_price) * quantityCents) / 100 : sum;
   }, 0);
-  $("orderTotal").textContent = money(total);
+  const discount = Number($("orderDiscount").value || 0);
+  $("orderSubtotal").textContent = money(total);
+  $("orderDiscountDisplay").textContent = money(discount);
+  $("orderTotal").textContent = money(total - discount);
 }
 
 async function openOrderModal() {
@@ -271,6 +548,7 @@ async function openOrderModal() {
   $("orderClientName").value = "";
   $("orderClientEmail").value = "";
   $("orderClientPhone").value = "";
+  $("orderClientAddress").value = "";
   $("orderClientSelect").disabled = true;
   $("orderClientSelect").innerHTML = `<option value="new">Loading customers from database…</option>`;
   state.orderLines = [{ id: state.nextOrderLineId++, itemId: "", quantity: "1" }];
@@ -283,8 +561,10 @@ async function openOrderModal() {
     $("orderClientSelect").innerHTML = `<option value="new">Walk-in / New customer</option>` +
       customers.map(c => `<option value="${esc(c.id)}">${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("");
     $("orderClientSelect").value = "new";
-  } catch {
+  } catch (error) {
     $("orderClientSelect").innerHTML = `<option value="new">Walk-in / New customer</option>`;
+    if (error.status === 401) return window.location.replace("/");
+    toast(`Saved customers could not be loaded: ${error.message}`);
   } finally {
     $("orderClientSelect").disabled = false;
   }
@@ -296,6 +576,7 @@ function onOrderClientSelected() {
     $("orderClientName").value = "";
     $("orderClientEmail").value = "";
     $("orderClientPhone").value = "";
+    $("orderClientAddress").value = "";
     return;
   }
   const customer = state.customers.find(c => String(c.id) === val);
@@ -303,6 +584,7 @@ function onOrderClientSelected() {
     $("orderClientName").value = customer.name || "";
     $("orderClientEmail").value = customer.email || "";
     $("orderClientPhone").value = customer.phone || "";
+    $("orderClientAddress").value = customer.address || "";
   }
 }
 
@@ -323,12 +605,14 @@ function showOrderReceipt(order) {
       <span>Customer</span><strong>${esc(order.client_name)}</strong>
       <span>Phone</span><strong>${esc(order.client_phone)}</strong>
       <span>Email</span><strong>${esc(order.client_email || "None")}</strong>
+      <span>Address</span><strong>${esc(order.client_address)}</strong>
       ${state.user?.display_name ? `<span>Encoded by</span><strong>${esc(state.user.display_name)}</strong>` : ""}
     </div>
     <div class="receipt-items">${items.map(item => `<div class="receipt-item">
       <span>${esc(item.item_name)}<small>${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)} × ${money(item.unit_price)}</small></span>
       <strong>${money(item.line_total)}</strong>
-    </div>`).join("")}</div>
+    </div>`).join("")}
+    <div class="receipt-item"><span>Discount</span><strong>−${money(order.discount_total)}</strong></div></div>
     ${order.note ? `<p class="receipt-note"><span>Note</span>${esc(order.note)}</p>` : ""}
     <div class="receipt-total"><span>Total</span><strong>${money(order.total)}</strong></div>
     <p class="receipt-disclaimer">Stock has been deducted from the main inventory. Order receipt for business records.</p>`;
@@ -343,23 +627,33 @@ async function loadSalesSummary() {
     $("salesTotalRevenue").textContent = money(data.totalSales);
     $("salesTotalOrders").textContent = Number(data.totalOrders).toLocaleString("en-PH");
     $("salesTotalItems").textContent = Number(data.totalItemsSold).toLocaleString("en-PH");
+    $("salesTotalDiscounts").textContent = money(data.totalDiscounts);
+    $("salesGrossProfit").textContent = money(data.grossProfit);
 
     const todayStr = new Date().toISOString().slice(0, 10);
     const todayEntry = (data.daily || []).find(d => d.date === todayStr);
     $("salesTodayRevenue").textContent = money(todayEntry?.total || 0);
     $("salesTodayCount").textContent = `${todayEntry?.orders || 0} orders today`;
 
-    const dailyRows = data.daily || [];
-    $("dailySalesBody").innerHTML = dailyRows.length ? dailyRows.map(row => `<tr>
+    renderDailySales();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("dailySalesBody").innerHTML = `<tr><td colspan="7" class="empty-cell">${esc(error.message)}</td></tr>`;
+  }
+}
+
+function renderDailySales() {
+    const dailyRows = state.salesSummary?.daily || [];
+    const visibleRows = pageRows("sales", dailyRows);
+    $("dailySalesBody").innerHTML = dailyRows.length ? visibleRows.map(row => `<tr>
       <td><strong>${esc(dateOnly(row.date))}</strong> (${esc(row.date)})</td>
       <td><strong>${Number(row.orders).toLocaleString("en-PH")}</strong> order${row.orders === 1 ? "" : "s"}</td>
       <td><strong>${Number(row.itemsSold).toLocaleString("en-PH")}</strong> units deducted</td>
+      <td class="price-cell">${money(row.discounts)}</td>
       <td class="price-cell"><strong>${money(row.total)}</strong></td>
-    </tr>`).join("") : `<tr><td colspan="4" class="empty-cell">No sales recorded yet. Client orders will appear here aggregated daily.</td></tr>`;
-  } catch (error) {
-    if (error.status === 401) return window.location.replace("/");
-    $("dailySalesBody").innerHTML = `<tr><td colspan="4" class="empty-cell">${esc(error.message)}</td></tr>`;
-  }
+      <td class="price-cell">${money(row.costOfGoods)}</td>
+      <td class="price-cell"><strong>${money(row.grossProfit)}</strong></td>
+    </tr>`).join("") : `<tr><td colspan="7" class="empty-cell">No sales recorded yet. Client orders will appear here aggregated daily.</td></tr>`;
 }
 
 // CUSTOMER DATABASE
@@ -381,15 +675,17 @@ function renderCustomers() {
     return !search || text.includes(search);
   });
 
-  $("customersBody").innerHTML = rows.length ? rows.map(c => `<tr>
+  const visibleRows = pageRows("customers", rows);
+  $("customersBody").innerHTML = rows.length ? visibleRows.map(c => `<tr>
     <td><strong>${esc(c.name)}</strong></td>
     <td>${esc(c.phone || "—")}</td>
-    <td>${esc(c.email || "—")}</td>
     <td>${esc(c.address || "—")}</td>
-    <td>${esc(c.notes || "—")}</td>
-    <td>${esc(dateOnly(c.created_at))}</td>
+    <td>${esc(c.last_purchase_date ? dateTime(c.last_purchase_date) : "—")}</td>
+    <td>${esc(c.purchased_items_summary || "No purchases recorded yet")}</td>
+    <td title="${Number(c.orders_count || 0)} orders">${money(c.total_purchases)}</td>
     <td>
       <div class="row-actions">
+        <button class="small-action" data-customer-action="history" data-id="${esc(c.id)}">Purchases (${Number(c.orders_count || 0)})</button>
         <button class="small-action" data-customer-action="edit" data-id="${esc(c.id)}">Edit</button>
         <button class="small-action" data-customer-action="delete" data-id="${esc(c.id)}">Delete</button>
       </div>
@@ -397,6 +693,36 @@ function renderCustomers() {
   </tr>`).join("") : `<tr><td colspan="7" class="empty-cell">No customers found. Click "＋ Add customer" to encode one.</td></tr>`;
 
   $("customerCount").textContent = `Showing ${rows.length} of ${state.customers.length} customers in database`;
+}
+
+function showCustomerPurchases(customer) {
+  state.customerPurchaseHistory = customer;
+  if (state.pagination["customer-purchases"]) state.pagination["customer-purchases"].page = 1;
+  $("historyCustName").textContent = customer.name || "—";
+  $("historyCustPhone").textContent = customer.phone || "No phone number";
+  $("historyCustAddress").textContent = customer.address || "No address recorded";
+  $("historyTotalPurchases").textContent = money(customer.total_purchases);
+  $("historyOrdersCount").textContent = `${Number(customer.orders_count || 0)} order${Number(customer.orders_count || 0) === 1 ? "" : "s"}`;
+  renderCustomerPurchases();
+  openModal("customerPurchasesModal");
+}
+
+function renderCustomerPurchases() {
+  const purchases = state.customerPurchaseHistory?.purchases || [];
+  const visiblePurchases = pageRows("customer-purchases", purchases);
+  $("customerPurchasesBody").innerHTML = purchases.length ? visiblePurchases.map(purchase => {
+    const items = (purchase.items || []).map(item =>
+      `${esc(item.item_name)} · ${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)} (${money(item.line_total)})`
+    ).join("<br>");
+    const details = [purchase.note, purchase.address].filter(Boolean).map(esc).join("<br>");
+    return `<tr>
+      <td>${esc(dateTime(purchase.date))}</td>
+      <td>${esc(purchase.receipt_number)}</td>
+      <td>${items || "—"}</td>
+      <td class="price-cell">${money(purchase.total)}</td>
+      <td>${details || "—"}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="5" class="empty-cell">No purchases recorded for this customer yet.</td></tr>`;
 }
 
 function openCustomerModal(customer = null) {
@@ -436,7 +762,8 @@ function renderUsers() {
     const multiplier = order === "desc" ? -1 : 1;
     rows.sort((a, b) => multiplier * String(a[field] || "").localeCompare(String(b[field] || ""), undefined, { sensitivity: "base" }));
   }
-  $("usersBody").innerHTML = rows.length ? rows.map(user => `<tr>
+  const visibleRows = pageRows("users", rows);
+  $("usersBody").innerHTML = rows.length ? visibleRows.map(user => `<tr>
     <td><strong>${esc(user.username)}</strong></td>
     <td>${esc(user.email || "—")}</td>
     <td>${esc(user.phone_number || "—")}</td>
@@ -473,18 +800,23 @@ function openAccountModal(user = null) {
 // ACTIVITY LOGS (Admin Only)
 async function loadActivityLogs() {
   try {
-    const logs = await api("/api/admin/activity-logs");
-    $("activityBody").innerHTML = logs.length ? logs.map(log => `<tr>
+    state.activityLogs = await api("/api/admin/activity-logs");
+    renderActivityLogs();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("activityBody").innerHTML = `<tr><td colspan="5" class="empty-cell">${esc(error.message)}</td></tr>`;
+  }
+}
+
+function renderActivityLogs() {
+    const logs = pageRows("activity", state.activityLogs);
+    $("activityBody").innerHTML = state.activityLogs.length ? logs.map(log => `<tr>
       <td>${esc(dateTime(log.created_at))}</td>
       <td>${esc(log.actor_name)}</td>
       <td><span class="category-pill">${esc(({ admin: "Super Admin", staff: "Staff" })[log.actor_role] || log.actor_role)}</span></td>
       <td>${esc(log.action.replace(/[._]/g, " "))}</td>
       <td>${esc(log.summary)}</td>
     </tr>`).join("") : `<tr><td colspan="5" class="empty-cell">No activity has been recorded yet.</td></tr>`;
-  } catch (error) {
-    if (error.status === 401) return window.location.replace("/");
-    $("activityBody").innerHTML = `<tr><td colspan="5" class="empty-cell">${esc(error.message)}</td></tr>`;
-  }
 }
 
 // UI HELPERS
@@ -505,6 +837,10 @@ function showApp(user) {
   const isAdmin = user.role === "admin";
   $("usersNavLink").classList.toggle("hidden", !isAdmin);
   $("activityNavLink").classList.toggle("hidden", !isAdmin);
+  const currentYear = new Date().getFullYear();
+  $("summaryYear").innerHTML = Array.from({ length: 7 }, (_, index) => currentYear + 2 - index)
+    .map(year => `<option value="${year}">${year}</option>`).join("");
+  $("summaryYear").value = String(currentYear);
 
   // Admin controls inventory editing; staff encodes orders and customers
   $("addItemBtn").classList.toggle("hidden", !isAdmin);
@@ -527,10 +863,30 @@ function setView(view) {
       eyebrow: "MATERIALS MANAGEMENT",
       subtitle: isAdmin ? "Track materials, stock levels, and edit inventory." : "Review materials and current stock levels (view-only for staff)."
     },
+    "inventory-monitoring": {
+      title: "Inventory Monitoring",
+      eyebrow: "MASTERFILE REPORT",
+      subtitle: "Review Masterfile item details and monitor current inventory, purchases, sales, damage, and returns."
+    },
     transactions: {
       title: "Stock movements & deductions",
       eyebrow: "STOCK CONTROL",
       subtitle: "Track inventory additions, deductions from client orders, and manual adjustments."
+    },
+    purchases: {
+      title: "Purchases and credit",
+      eyebrow: "SUPPLIER MANAGEMENT",
+      subtitle: "Record cash and credit purchases, supplier references, due dates, and payments."
+    },
+    losses: {
+      title: "Damage and returns",
+      eyebrow: "INVENTORY ADJUSTMENTS",
+      subtitle: "Track damaged stock, returns to suppliers, and items returned by customers."
+    },
+    monthly: {
+      title: "Monthly summary",
+      eyebrow: "BUSINESS PERFORMANCE",
+      subtitle: "Review monthly purchases, net sales, discounts, cost of goods sold, and gross profit."
     },
     orders: {
       title: "Client orders",
@@ -568,14 +924,21 @@ function setView(view) {
   $("addItemBtn").classList.toggle("hidden", view !== "inventory" || !isAdmin);
   $("pageNewOrderBtn").classList.toggle("hidden", view !== "orders");
   $("pageAddCustomerBtn").classList.toggle("hidden", view !== "customers");
+  $("newPurchaseBtn").classList.toggle("hidden", view !== "purchases" || !isAdmin);
+  $("newLossBtn").classList.toggle("hidden", view !== "losses" || !isAdmin);
 
   // Toggle stat cards
   $("statsGrid").classList.toggle("hidden", view !== "inventory");
+  $("monitoringStatsGrid").classList.toggle("hidden", view !== "inventory-monitoring");
   $("salesStatsGrid").classList.toggle("hidden", view !== "sales");
 
   // Toggle main panels
   $("inventoryPanel").classList.toggle("hidden", view !== "inventory");
+  $("inventoryMonitoringPanel").classList.toggle("hidden", view !== "inventory-monitoring");
   $("transactionsPanel").classList.toggle("hidden", view !== "transactions");
+  $("purchasesPanel").classList.toggle("hidden", view !== "purchases");
+  $("lossesPanel").classList.toggle("hidden", view !== "losses");
+  $("monthlyPanel").classList.toggle("hidden", view !== "monthly");
   $("ordersPanel").classList.toggle("hidden", view !== "orders");
   $("salesPanel").classList.toggle("hidden", view !== "sales");
   $("customersPanel").classList.toggle("hidden", view !== "customers");
@@ -583,7 +946,11 @@ function setView(view) {
   $("activityPanel").classList.toggle("hidden", view !== "activity");
 
   if (view === "inventory") renderItems();
+  if (view === "inventory-monitoring") loadInventoryMonitoring();
   if (view === "transactions") loadTransactions();
+  if (view === "purchases") loadPurchases();
+  if (view === "losses") loadLosses();
+  if (view === "monthly") loadMonthlySummary();
   if (view === "orders") loadOrders();
   if (view === "sales") loadSalesSummary();
   if (view === "customers") loadCustomers();
@@ -695,10 +1062,13 @@ $("changePasswordForm").addEventListener("submit", async event => {
 // Inventory events
 $("addItemBtn").addEventListener("click", () => { resetItemForm(); openModal("itemModal"); });
 $("refreshBtn").addEventListener("click", loadAll);
-$("searchInput").addEventListener("input", renderItems);
-$("categoryFilter").addEventListener("change", renderItems);
-$("stockFilter").addEventListener("change", renderItems);
-$("inventoryDateSort").addEventListener("change", renderItems);
+$("refreshInventoryMonitoringBtn").addEventListener("click", loadInventoryMonitoring);
+$("monitoringSearchInput").addEventListener("input", () => resetTablePage("inventory-monitoring", renderInventoryMonitoring));
+$("monitoringCategoryFilter").addEventListener("change", () => resetTablePage("inventory-monitoring", renderInventoryMonitoring));
+$("monitoringStockFilter").addEventListener("change", () => resetTablePage("inventory-monitoring", renderInventoryMonitoring));
+$("searchInput").addEventListener("input", () => resetTablePage("inventory", renderItems));
+$("categoryFilter").addEventListener("change", () => resetTablePage("inventory", renderItems));
+$("stockFilter").addEventListener("change", () => resetTablePage("inventory", renderItems));
 
 $("inventoryBody").addEventListener("click", async e => {
   const button = e.target.closest("button[data-action]");
@@ -707,6 +1077,7 @@ $("inventoryBody").addEventListener("click", async e => {
   if (!item) return;
 
   if (button.dataset.action === "edit") return editItem(item);
+  if (button.dataset.action === "add-stock") return openAddStockModal(item);
   if (button.dataset.action === "move") {
     $("movementSearch").value = "";
     renderMovementOptions();
@@ -719,6 +1090,36 @@ $("inventoryBody").addEventListener("click", async e => {
     state.itemToDelete = item;
     $("deleteItemName").textContent = item.name;
     openModal("deleteModal");
+  }
+});
+
+$("addStockQty").addEventListener("input", () => {
+  const item = state.items.find(x => String(x.id) === $("addStockItemId").value);
+  if (item) updateAddStockPreview(item);
+});
+
+$("addStockForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  $("addStockError").textContent = "";
+  const itemId = $("addStockItemId").value;
+  const button = $("confirmAddStockBtn");
+  button.disabled = true;
+  try {
+    await api(`/api/items/${encodeURIComponent(itemId)}/add-stock`, {
+      method: "POST",
+      body: JSON.stringify({
+        added_quantity: $("addStockQty").value,
+        note: $("addStockNote").value
+      })
+    });
+    closeModal("addStockModal");
+    toast("New stock added to the existing quantity.");
+    await loadAll();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("addStockError").textContent = error.message;
+  } finally {
+    button.disabled = false;
   }
 });
 
@@ -744,15 +1145,144 @@ $("deleteModal").addEventListener("click", e => {
   if (e.target.closest("[data-close='deleteModal']")) state.itemToDelete = null;
 });
 
+function updatePurchaseFields() {
+  const isCredit = $("purchaseType").value === "credit";
+  $("purchasePaidField").classList.toggle("hidden", !isCredit);
+  $("purchaseDueField").classList.toggle("hidden", !isCredit);
+}
+
+$("newPurchaseBtn").addEventListener("click", () => {
+  $("purchaseForm").reset();
+  $("purchaseItem").innerHTML = inventoryOptions();
+  $("purchaseError").textContent = "";
+  updatePurchaseFields();
+  openModal("purchaseModal");
+});
+
+$("purchaseType").addEventListener("change", updatePurchaseFields);
+$("purchaseItem").addEventListener("change", () => {
+  const item = state.items.find(entry => String(entry.id) === $("purchaseItem").value);
+  if (!item) return;
+  $("purchaseSupplier").value = item.supplier || "";
+  $("purchaseUnitCost").value = Number(item.supplier_cost || 0).toFixed(2);
+});
+
+$("purchaseForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  $("purchaseError").textContent = "";
+  const button = $("savePurchaseBtn");
+  button.disabled = true;
+  try {
+    await api("/api/purchases", {
+      method: "POST",
+      body: JSON.stringify({
+        item_id: $("purchaseItem").value,
+        purchase_type: $("purchaseType").value,
+        quantity: $("purchaseQuantity").value,
+        unit_cost: $("purchaseUnitCost").value,
+        supplier: $("purchaseSupplier").value,
+        invoice_number: $("purchaseInvoice").value,
+        amount_paid: $("purchaseType").value === "credit" ? $("purchasePaid").value || "0" : "0",
+        due_date: $("purchaseType").value === "credit" ? $("purchaseDueDate").value : "",
+        note: $("purchaseNote").value
+      })
+    });
+    closeModal("purchaseModal");
+    toast("Purchase recorded and stock updated.");
+    await loadAll();
+    await loadPurchases();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("purchaseError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("purchasesBody").addEventListener("click", event => {
+  const button = event.target.closest("[data-purchase-payment]");
+  if (!button) return;
+  state.purchaseToPay = state.purchases.find(purchase => String(purchase.id) === button.dataset.purchasePayment);
+  if (!state.purchaseToPay) return;
+  const balance = Number(state.purchaseToPay.total_amount) - Number(state.purchaseToPay.amount_paid);
+  $("paymentForm").reset();
+  $("paymentAmount").max = balance.toFixed(2);
+  $("paymentBalanceText").textContent = `Remaining balance: ${money(balance)}`;
+  $("paymentError").textContent = "";
+  openModal("paymentModal");
+});
+
+$("paymentForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!state.purchaseToPay) return;
+  const button = $("savePaymentBtn");
+  button.disabled = true;
+  $("paymentError").textContent = "";
+  try {
+    await api(`/api/purchases/${encodeURIComponent(state.purchaseToPay.id)}/payments`, {
+      method: "POST",
+      body: JSON.stringify({ amount: $("paymentAmount").value, note: $("paymentNote").value })
+    });
+    closeModal("paymentModal");
+    state.purchaseToPay = null;
+    toast("Credit payment recorded.");
+    await loadPurchases();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("paymentError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("newLossBtn").addEventListener("click", () => {
+  $("lossForm").reset();
+  $("lossItem").innerHTML = inventoryOptions();
+  $("lossError").textContent = "";
+  openModal("lossModal");
+});
+
+$("lossForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const button = $("saveLossBtn");
+  button.disabled = true;
+  $("lossError").textContent = "";
+  try {
+    await api("/api/damage-returns", {
+      method: "POST",
+      body: JSON.stringify({
+        item_id: $("lossItem").value,
+        type: $("lossType").value,
+        quantity: $("lossQuantity").value,
+        note: $("lossNote").value
+      })
+    });
+    closeModal("lossModal");
+    toast("Damage / return record saved and stock updated.");
+    await loadAll();
+    await loadLosses();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("lossError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
 $("itemForm").addEventListener("submit", async e => {
   e.preventDefault();
   $("itemError").textContent = "";
   const id = $("itemId").value;
   const payload = {
+    item_number: $("itemNumber").value ? Number($("itemNumber").value) : null,
     name: $("itemName").value,
     category: $("itemCategory").value,
+    description: $("itemDescription").value,
+    supplier: $("itemSupplier").value,
+    supplier_cost: $("itemSupplierCost").value,
     brand: $("itemBrand").value,
     variant: $("itemVariant").value,
+    other_details: $("itemOtherDetails").value,
     sku: $("itemSku").value,
     unit: $("itemUnit").value,
     quantity: $("itemQuantity").value,
@@ -780,8 +1310,8 @@ $("newMovementBtn").addEventListener("click", () => {
 });
 
 $("movementSearch").addEventListener("input", renderMovementOptions);
-$("movementDateSort").addEventListener("change", renderTransactions);
-$("movementTypeFilter").addEventListener("change", renderTransactions);
+$("movementDateSort").addEventListener("change", () => resetTablePage("transactions", renderTransactions));
+$("movementTypeFilter").addEventListener("change", () => resetTablePage("transactions", renderTransactions));
 
 $("movementForm").addEventListener("submit", async e => {
   e.preventDefault();
@@ -808,6 +1338,7 @@ $("movementForm").addEventListener("submit", async e => {
 $("newOrderBtn").addEventListener("click", openOrderModal);
 $("pageNewOrderBtn").addEventListener("click", openOrderModal);
 $("orderClientSelect").addEventListener("change", onOrderClientSelected);
+$("orderDiscount").addEventListener("input", updateOrderTotal);
 $("orderClientPhone").addEventListener("input", e => {
   e.target.value = e.target.value.replace(/\D/g, "").slice(0, 11);
 });
@@ -857,6 +1388,11 @@ $("orderForm").addEventListener("submit", async event => {
   $("orderConfirmClient").textContent = $("orderClientName").value.trim();
   $("orderConfirmItems").textContent = `${state.orderLines.length} item type${state.orderLines.length === 1 ? "" : "s"}`;
   $("orderConfirmTotal").textContent = $("orderTotal").textContent;
+  const subtotal = Number($("orderSubtotal").textContent.replace(/[^\d.-]/g, ""));
+  if (Number($("orderDiscount").value) > subtotal) {
+    $("orderError").textContent = "Discount cannot be greater than the order subtotal.";
+    return;
+  }
   openModal("orderConfirmModal");
 });
 
@@ -871,6 +1407,8 @@ $("confirmOrderBtn").addEventListener("click", async () => {
         client_name: $("orderClientName").value,
         client_email: $("orderClientEmail").value,
         client_phone: $("orderClientPhone").value,
+        client_address: $("orderClientAddress").value,
+        discount: $("orderDiscount").value,
         note: $("orderNote").value,
         items: state.orderLines.map(line => ({ item_id: line.itemId, quantity: line.quantity }))
       })
@@ -916,12 +1454,13 @@ $("exportOrdersBtn").addEventListener("click", async () => {
 
 // Sales per day events
 $("refreshSalesBtn").addEventListener("click", loadSalesSummary);
+$("summaryYear").addEventListener("change", loadMonthlySummary);
 
 // Customer database events
 $("addCustomerBtn").addEventListener("click", () => openCustomerModal());
 $("pageAddCustomerBtn").addEventListener("click", () => openCustomerModal());
 $("refreshCustomersBtn").addEventListener("click", loadCustomers);
-$("customerSearchInput").addEventListener("input", renderCustomers);
+$("customerSearchInput").addEventListener("input", () => resetTablePage("customers", renderCustomers));
 
 $("custPhone").addEventListener("input", e => {
   e.target.value = e.target.value.replace(/\D/g, "").slice(0, 11);
@@ -963,6 +1502,8 @@ $("customersBody").addEventListener("click", e => {
 
   if (button.dataset.customerAction === "edit") {
     openCustomerModal(customer);
+  } else if (button.dataset.customerAction === "history") {
+    showCustomerPurchases(customer);
   } else if (button.dataset.customerAction === "delete") {
     state.customerToDelete = customer;
     $("deleteCustomerName").textContent = customer.name;
@@ -995,7 +1536,7 @@ $("customerDeleteModal").addEventListener("click", e => {
 
 // User Management Events (Admin)
 $("addAccountBtn").addEventListener("click", () => openAccountModal());
-$("userSort").addEventListener("change", renderUsers);
+$("userSort").addEventListener("change", () => resetTablePage("users", renderUsers));
 $("accountPhoneNumber").addEventListener("input", e => {
   e.target.value = e.target.value.replace(/\D/g, "").slice(0, 11);
 });
@@ -1083,6 +1624,28 @@ $("printReceiptBtn").addEventListener("click", () => {
 });
 
 // Navigation & Generic modals
+document.addEventListener("change", event => {
+  const select = event.target.closest("[data-page-size]");
+  if (!select) return;
+  const container = select.closest(".table-pagination");
+  const key = container?.id.replace("pagination-", "");
+  if (!key) return;
+  const current = state.pagination[key] || { page: 1, limit: 10 };
+  state.pagination[key] = { page: 1, limit: Number(select.value) || current.limit };
+  renderPage(key);
+});
+
+document.addEventListener("click", event => {
+  const button = event.target.closest("[data-page-prev], [data-page-next]");
+  if (!button || button.disabled) return;
+  const container = button.closest(".table-pagination");
+  const key = container?.id.replace("pagination-", "");
+  if (!key) return;
+  const current = state.pagination[key] || (state.pagination[key] = { page: 1, limit: 10 });
+  current.page += button.hasAttribute("data-page-next") ? 1 : -1;
+  renderPage(key);
+});
+
 document.querySelectorAll(".nav-link").forEach(b => b.addEventListener("click", () => {
   setView(b.dataset.view);
   $("sidebar").classList.remove("open");
