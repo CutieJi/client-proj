@@ -86,6 +86,8 @@ function renderPage(key) {
     transactions: renderTransactions,
     purchases: renderPurchases,
     losses: renderLosses,
+    damage: renderLosses,
+    returns: renderLosses,
     monthly: renderMonthlySummary,
     orders: renderOrders,
     "sales-transactions": renderSalesTransactions,
@@ -133,7 +135,7 @@ async function loadAll() {
     if (state.view === "dashboard") await loadDashboard();
     if (state.view === "transactions") await loadTransactions();
     if (state.view === "purchases-direct" || state.view === "purchases-credit") await loadPurchases();
-    if (state.view === "losses") await loadLosses();
+    if (state.view === "damage" || state.view === "returns") await loadLosses();
     if (state.view === "monthly") await loadMonthlySummary();
     if (state.view === "orders") await loadOrders();
     if (state.view === "sales-transactions") await loadSalesTransactions();
@@ -612,24 +614,67 @@ async function loadLosses() {
     renderLosses();
   } catch (error) {
     if (error.status === 401) return window.location.replace("/");
-    $("lossesBody").innerHTML = `<tr><td colspan="7" class="empty-cell">${esc(error.message)}</td></tr>`;
-    $("lossCount").textContent = "Unable to load";
+    const isReturns = state.view === "returns";
+    $(`${isReturns ? "returns" : "damage"}Body`).innerHTML = `<tr><td colspan="${isReturns ? 12 : 11}" class="empty-cell">${esc(error.message)}</td></tr>`;
+    $(`${isReturns ? "returns" : "damage"}Count`).textContent = "Unable to load";
   }
 }
 
 function renderLosses() {
-    const labels = { damage: "Damage / write-off", customer_return: "Customer return", supplier_return: "Supplier return" };
-    const rows = pageRows("losses", state.losses);
-    $("lossesBody").innerHTML = state.losses.length ? rows.map(event => `<tr>
-      <td>${esc(dateTime(event.created_at))}</td>
-      <td><div class="material-name">${esc(event.inventory_items?.name || "Deleted item")}</div><div class="material-meta">${esc(event.inventory_items?.sku || "")}</div></td>
-      <td><span class="category-pill">${labels[event.type] || esc(event.type)}</span></td>
-      <td>${Number(event.quantity).toLocaleString("en-PH")} ${esc(event.inventory_items?.unit || "")}</td>
-      <td class="price-cell">${money(event.total_amount)}</td>
-      <td>${Number(event.balance_after).toLocaleString("en-PH")}</td>
-      <td>${esc(event.note || "—")}</td>
-    </tr>`).join("") : `<tr><td colspan="7" class="empty-cell">No damage or return records yet.</td></tr>`;
-    $("lossCount").textContent = `Showing ${state.losses.length} records`;
+  const isReturns = state.view === "returns";
+  const month = Number($("lossMonth").value) || new Date().getMonth() + 1;
+  const year = Number($("lossYear").value) || new Date().getFullYear();
+  const records = state.losses.filter(event => {
+    const created = new Date(event.created_at);
+    const isReturn = event.type === "customer_return" || event.type === "supplier_return";
+    return isReturn === isReturns
+      && created.getUTCFullYear() === year
+      && created.getUTCMonth() + 1 === month;
+  });
+  const visibleRows = pageRows(isReturns ? "returns" : "damage", records);
+  const quantity = records.reduce((sum, event) => sum + Number(event.quantity || 0), 0);
+  const supplierCost = records.reduce((sum, event) => sum + Number(event.total_amount || 0), 0);
+  const returnValue = records.reduce((sum, event) =>
+    sum + Number(event.quantity || 0) * Number(event.inventory_items?.unit_price || 0), 0);
+  const monthName = new Intl.DateTimeFormat("en", { month: "long", timeZone: "UTC" })
+    .format(new Date(Date.UTC(year, month - 1, 1)));
+
+  $("lossAmountLabel").textContent = isReturns ? "Total returns" : "Total damage items";
+  $("lossQuantityLabel").textContent = isReturns ? "Returned quantity" : "Quantity damaged";
+  $("lossTotalAmount").textContent = money(isReturns ? returnValue : supplierCost);
+  $("lossTotalQuantity").textContent = quantity.toLocaleString("en-PH");
+  $("lossSupplierCostCard").classList.toggle("hidden", !isReturns);
+  $("lossSupplierCostAmount").textContent = money(supplierCost);
+  $("newLossBtn").textContent = `＋ Record ${isReturns ? "return" : "damage"}`;
+  $("damageDescription").textContent = `${monthName} ${year} damaged stock records, matching the workbook columns.`;
+  $("returnsDescription").textContent = `${monthName} ${year} customer and supplier returns, matching the workbook columns.`;
+
+  const body = $(`${isReturns ? "returns" : "damage"}Body`);
+  const count = $(`${isReturns ? "returns" : "damage"}Count`);
+  body.innerHTML = records.length ? visibleRows.map(event => {
+    const item = event.inventory_items || {};
+    const amount = isReturns ? Number(event.quantity || 0) * Number(item.unit_price || 0) : Number(event.total_amount || 0);
+    const columns = [
+      `<td>${esc(item.sku || item.item_number || "—")}</td>`,
+      `<td>${esc(dateOnly(event.created_at))}</td>`,
+      `<td><div class="material-name">${esc(item.name || "Deleted item")}</div></td>`,
+      `<td>${esc(item.category || "—")}</td>`,
+      `<td>${esc(item.description || "—")}</td>`
+    ];
+    if (isReturns) {
+      columns.push(`<td><span class="category-pill">${event.type === "supplier_return" ? "Supplier return" : "Customer return"}</span></td>`);
+    }
+    columns.push(
+      `<td class="price-cell">${money(event.unit_cost)}</td>`,
+      `<td class="price-cell">${money(item.unit_price)}</td>`,
+      `<td class="quantity-cell">${Number(event.quantity).toLocaleString("en-PH")} ${esc(item.unit || "")}</td>`,
+      `<td class="price-cell">${money(amount)}</td>`,
+      `<td class="quantity-cell">${Number(event.balance_after).toLocaleString("en-PH")}</td>`,
+      `<td>${esc(event.note || "—")}</td>`
+    );
+    return `<tr>${columns.join("")}</tr>`;
+  }).join("") : `<tr><td colspan="${isReturns ? 12 : 11}" class="empty-cell">No ${isReturns ? "return" : "damage"} records for ${esc(monthName)} ${year}.</td></tr>`;
+  count.textContent = `Showing ${records.length} ${isReturns ? "return" : "damage"} records`;
 }
 
 async function loadMonthlySummary() {
@@ -810,10 +855,10 @@ function renderOrderLines() {
     const options = sortMaterialsAlphabetically(state.items).map(item => `<option value="${esc(item.id)}"${String(item.id) === line.itemId ? " selected" : ""}${Number(item.quantity) <= 0 && String(item.id) !== line.itemId ? " disabled" : ""}>${esc(item.name)}${item.variant ? ` · ${esc(item.variant)}` : ""} (stock: ${Number(item.quantity).toLocaleString("en-PH")})</option>`).join("");
     const quantityMax = selectedItem ? `max="${Number(selectedItem.quantity)}"` : "";
     return `<div class="order-line" data-order-line="${line.id}">
-      <label class="field">Material<select data-order-item required>
+      <label class="field"><span class="field-label">Material <span class="required-mark">*</span></span><select data-order-item required>
         <option value="">${state.items.length ? "Select a material" : "No inventory items available"}</option>${options}
       </select></label>
-      <label class="field">Quantity<input data-order-quantity type="number" min="0.01" step="0.01" ${quantityMax} value="${esc(line.quantity)}" required></label>
+      <label class="field"><span class="field-label">Quantity <span class="required-mark">*</span></span><input data-order-quantity type="number" min="0.01" step="0.01" ${quantityMax} value="${esc(line.quantity)}" required></label>
       <button class="icon-button order-line-remove" type="button" data-order-remove aria-label="Remove item" ${state.orderLines.length === 1 ? "disabled" : ""}>×</button>
     </div>`;
   }).join("") : `<p class="order-lines-empty">Add at least one material to this order.</p>`;
@@ -1170,6 +1215,7 @@ function openAccountModal(user = null) {
   $("accountRole").disabled = user?.user_id === state.user.user_id;
   $("accountPassword").value = "";
   $("accountPassword").required = !user;
+  $("accountPasswordRequiredMark").classList.toggle("hidden", Boolean(user));
   $("accountPasswordHint").textContent = user
     ? "Leave blank to keep the current password; enter at least 8 characters to change."
     : "At least 8 characters.";
@@ -1241,6 +1287,10 @@ function showApp(user) {
   $("purchaseYear").value = String(currentYear);
   $("purchaseMonth").innerHTML = $("dashboardMonth").innerHTML;
   $("purchaseMonth").value = String(new Date().getMonth() + 1);
+  $("lossYear").innerHTML = $("summaryYear").innerHTML;
+  $("lossYear").value = String(currentYear);
+  $("lossMonth").innerHTML = $("dashboardMonth").innerHTML;
+  $("lossMonth").value = String(new Date().getMonth() + 1);
 
   // Admin controls inventory editing; staff encodes orders and customers
   $("addItemBtn").classList.toggle("hidden", !isAdmin);
@@ -1252,12 +1302,17 @@ function showApp(user) {
 
 function setView(view) {
   if (["users", "activity"].includes(view) && state.user?.role !== "admin") view = "inventory";
+  if (view === "losses") view = "damage";
   state.view = view;
   const isPurchaseView = ["purchases-direct", "purchases-credit"].includes(view);
+  const isLossView = ["damage", "returns"].includes(view);
   document.querySelectorAll(".nav-link[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === view));
   $("purchasesNavToggle").classList.toggle("active", isPurchaseView);
   $("purchasesSubnav").hidden = !isPurchaseView;
   $("purchasesNavToggle").setAttribute("aria-expanded", String(!$("purchasesSubnav").hidden));
+  $("lossesNavToggle").classList.toggle("active", isLossView);
+  $("lossesSubnav").hidden = !isLossView;
+  $("lossesNavToggle").setAttribute("aria-expanded", String(!$("lossesSubnav").hidden));
 
   const isAdmin = state.user?.role === "admin";
 
@@ -1292,10 +1347,15 @@ function setView(view) {
       eyebrow: "CREDIT PURCHASES",
       subtitle: "Review credit invoices, due dates, paid status, and balances by month."
     },
-    losses: {
-      title: "Damage and returns",
-      eyebrow: "INVENTORY ADJUSTMENTS",
-      subtitle: "Track damaged stock, returns to suppliers, and items returned by customers."
+    damage: {
+      title: "Damage items",
+      eyebrow: "DAMAGE ITEMS",
+      subtitle: "Review damaged stock by month using the workbook's damage transaction columns."
+    },
+    returns: {
+      title: "Returns items",
+      eyebrow: "RETURNS ITEMS",
+      subtitle: "Review customer and supplier returns by month using the workbook's return transaction columns."
     },
     monthly: {
       title: "Monthly summary",
@@ -1344,7 +1404,7 @@ function setView(view) {
   $("pageNewOrderBtn").classList.toggle("hidden", view !== "orders");
   $("pageAddCustomerBtn").classList.toggle("hidden", view !== "customers");
   $("newPurchaseBtn").classList.toggle("hidden", !isPurchaseView || !isAdmin);
-  $("newLossBtn").classList.toggle("hidden", view !== "losses" || !isAdmin);
+  $("newLossBtn").classList.toggle("hidden", !isLossView || !isAdmin);
 
   // Toggle stat cards
   $("monitoringStatsGrid").classList.toggle("hidden", view !== "inventory-monitoring");
@@ -1353,6 +1413,8 @@ function setView(view) {
   $("salesTransactionsStatsGrid").classList.toggle("hidden", view !== "sales-transactions");
   $("purchaseFilters").classList.toggle("hidden", !isPurchaseView);
   $("purchaseStatsGrid").classList.toggle("hidden", !isPurchaseView);
+  $("lossFilters").classList.toggle("hidden", !isLossView);
+  $("lossStatsGrid").classList.toggle("hidden", !isLossView);
   $("statsGrid").classList.toggle("hidden", view !== "inventory");
   $("dashboardStatsGrid").classList.toggle("hidden", view !== "dashboard");
 
@@ -1362,7 +1424,8 @@ function setView(view) {
   $("inventoryMonitoringPanel").classList.toggle("hidden", view !== "inventory-monitoring");
   $("transactionsPanel").classList.toggle("hidden", view !== "transactions");
   $("purchasesPanel").classList.toggle("hidden", !isPurchaseView);
-  $("lossesPanel").classList.toggle("hidden", view !== "losses");
+  $("damagePanel").classList.toggle("hidden", view !== "damage");
+  $("returnsPanel").classList.toggle("hidden", view !== "returns");
   $("monthlyPanel").classList.toggle("hidden", view !== "monthly");
   $("ordersPanel").classList.toggle("hidden", view !== "orders");
   $("salesTransactionsPanel").classList.toggle("hidden", view !== "sales-transactions");
@@ -1376,7 +1439,7 @@ function setView(view) {
   if (view === "inventory-monitoring") loadInventoryMonitoring();
   if (view === "transactions") loadTransactions();
   if (isPurchaseView) loadPurchases();
-  if (view === "losses") loadLosses();
+  if (isLossView) loadLosses();
   if (view === "monthly") loadMonthlySummary();
   if (view === "orders") loadOrders();
   if (view === "sales-transactions") loadSalesTransactions();
@@ -1514,10 +1577,18 @@ $("dashboardItemFilter").addEventListener("change", renderDashboard);
 $("purchaseMonth").addEventListener("change", () => resetTablePage("purchases", renderPurchases));
 $("purchaseYear").addEventListener("change", () => resetTablePage("purchases", renderPurchases));
 $("refreshPurchasesBtn").addEventListener("click", loadPurchases);
+$("lossMonth").addEventListener("change", () => resetTablePage(state.view, renderLosses));
+$("lossYear").addEventListener("change", () => resetTablePage(state.view, renderLosses));
+$("refreshLossesBtn").addEventListener("click", loadLosses);
 $("purchasesNavToggle").addEventListener("click", () => {
   const submenu = $("purchasesSubnav");
   submenu.hidden = !submenu.hidden;
   $("purchasesNavToggle").setAttribute("aria-expanded", String(!submenu.hidden));
+});
+$("lossesNavToggle").addEventListener("click", () => {
+  const submenu = $("lossesSubnav");
+  submenu.hidden = !submenu.hidden;
+  $("lossesNavToggle").setAttribute("aria-expanded", String(!submenu.hidden));
 });
 $("monthlyPanel").addEventListener("click", event => {
   const button = event.target.closest("[data-closing-save], [data-closing-clear]");
@@ -1710,6 +1781,8 @@ $("paymentForm").addEventListener("submit", async event => {
 $("newLossBtn").addEventListener("click", () => {
   $("lossForm").reset();
   $("lossItem").innerHTML = inventoryOptions();
+  $("lossType").value = state.view === "returns" ? "customer_return" : "damage";
+  $("lossModalTitle").textContent = state.view === "returns" ? "Record returned item" : "Record damaged item";
   $("lossError").textContent = "";
   openModal("lossModal");
 });

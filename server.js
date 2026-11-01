@@ -791,7 +791,7 @@ app.post("/api/purchases/:id/payments", adminRequired, async (req, res) => {
 
 app.get("/api/damage-returns", async (req, res) => {
   const { data, error } = await fetchAllPages(() => supabase.from("inventory_transactions")
-    .select("id,item_id,type,quantity,unit_cost,total_amount,note,balance_after,created_at,inventory_items(name,unit,sku)")
+    .select("id,item_id,type,quantity,unit_cost,total_amount,note,balance_after,created_at,inventory_items(name,unit,sku,item_number,category,description,unit_price)")
     .in("type", ["damage", "customer_return", "supplier_return"])
     .order("created_at", { ascending: false }).order("id", { ascending: false }));
   if (error) return fail(res, error);

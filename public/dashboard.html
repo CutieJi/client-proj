@@ -46,11 +46,15 @@
         <button class="nav-link nav-sub-link" type="button" data-view="purchases-direct">Direct purchase</button>
         <button class="nav-link nav-sub-link" type="button" data-view="purchases-credit">Credit purchase</button>
       </div>
-      <button class="nav-link" data-view="losses">
+      <button class="nav-link nav-parent" id="lossesNavToggle" type="button" aria-expanded="false" aria-controls="lossesSubnav">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
           <path d="M8 1 1 14h14zm0 4 4.5 8h-9zM7.25 7h1.5v3h-1.5zm0 4h1.5v1.5h-1.5z"/>
-        </svg></span> Damage &amp; returns
+        </svg></span><span class="nav-parent-label">Damage &amp; returns</span><span class="nav-chevron" aria-hidden="true">⌄</span>
       </button>
+      <div class="nav-submenu" id="lossesSubnav" hidden>
+        <button class="nav-link nav-sub-link" type="button" data-view="damage">Damage items</button>
+        <button class="nav-link nav-sub-link" type="button" data-view="returns">Returns items</button>
+      </div>
       <button class="nav-link" data-view="monthly">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
           <path d="M2 2h12v12H2zm2 2v2h2V4zm3 0v2h2V4zm3 0v2h2V4zM4 7v2h2V7zm3 0v2h2V7zm3 0v2h2V7zm-6 3v2h2v-2zm3 0v2h2v-2zm3 0v2h2v-2z"/>
@@ -360,17 +364,39 @@
           <div class="table-footer"><span id="purchaseCount">—</span></div>
         </section>
 
-        <section class="panel hidden" id="lossesPanel">
+        <div class="toolbar purchase-filters hidden" id="lossFilters">
+          <label class="field">Month<select id="lossMonth"></select></label>
+          <label class="field">Year<select id="lossYear"></select></label>
+          <button class="secondary-button" id="refreshLossesBtn" type="button">↻ Refresh</button>
+          <button class="primary-button hidden" id="newLossBtn" type="button">＋ Record damage / return</button>
+        </div>
+        <div class="stats-grid purchase-stats-grid hidden" id="lossStatsGrid">
+          <article class="stat-card"><div class="stat-top"><span id="lossAmountLabel">Total damage value</span></div><strong id="lossTotalAmount">₱0.00</strong><small>Selected month</small></article>
+          <article class="stat-card"><div class="stat-top"><span id="lossQuantityLabel">Quantity damaged</span></div><strong id="lossTotalQuantity">0</strong><small>Selected month</small></article>
+          <article class="stat-card hidden" id="lossSupplierCostCard"><div class="stat-top"><span>Returns (supplier cost)</span></div><strong id="lossSupplierCostAmount">₱0.00</strong><small>Selected month</small></article>
+        </div>
+        <section class="panel hidden" id="damagePanel">
           <div class="panel-header">
-            <div><h2>Damage and returned items</h2><p>Record damaged stock, supplier returns, and customer returns with stock balances updated automatically.</p></div>
-            <button class="primary-button hidden" id="newLossBtn" type="button">＋ Record damage / return</button>
+            <div><h2>Damage Items</h2><p id="damageDescription">Monthly damaged stock records, matching the workbook columns.</p></div>
           </div>
           <div class="table-wrap">
-            <table><thead><tr><th>Date</th><th>Material</th><th>Record type</th><th>Quantity</th><th>Cost value</th><th>Balance after</th><th>Note</th></tr></thead>
-              <tbody id="lossesBody"><tr><td colspan="7" class="empty-cell">Loading records…</td></tr></tbody></table>
+            <table><thead><tr><th>Product SKU/no#</th><th>Date</th><th>Items</th><th>Category</th><th>Description</th><th>Supplier cost</th><th>Selling price</th><th>Quantity damaged</th><th>Purchased amount</th><th>Balance after</th><th>Note</th></tr></thead>
+              <tbody id="damageBody"><tr><td colspan="11" class="empty-cell">Loading damage records…</td></tr></tbody></table>
           </div>
-          <div class="table-pagination" id="pagination-losses"></div>
-          <div class="table-footer"><span id="lossCount">—</span></div>
+          <div class="table-pagination" id="pagination-damage"></div>
+          <div class="table-footer"><span id="damageCount">—</span></div>
+        </section>
+
+        <section class="panel hidden" id="returnsPanel">
+          <div class="panel-header">
+            <div><h2>Returns Items</h2><p id="returnsDescription">Monthly customer and supplier returns, matching the workbook columns.</p></div>
+          </div>
+          <div class="table-wrap">
+            <table><thead><tr><th>Product SKU/no#</th><th>Date</th><th>Items</th><th>Category</th><th>Description</th><th>Return type</th><th>Supplier cost</th><th>Selling price</th><th>Returned quantity</th><th>Total returns</th><th>Balance after</th><th>Note</th></tr></thead>
+              <tbody id="returnsBody"><tr><td colspan="12" class="empty-cell">Loading return records…</td></tr></tbody></table>
+          </div>
+          <div class="table-pagination" id="pagination-returns"></div>
+          <div class="table-footer"><span id="returnsCount">—</span></div>
         </section>
 
         <section class="panel hidden" id="monthlyPanel">
@@ -615,9 +641,9 @@
           <label class="field">Item no#<input id="itemNumber" type="number" min="1" step="1"
               placeholder="Optional item number"></label>
           <label class="field">Product SKU/no#<input id="itemSku" placeholder="Optional SKU"></label>
-          <label class="field span-2">Items *<input id="itemName" required maxlength="120"
+          <label class="field span-2"><span class="field-label">Items <span class="required-mark">*</span></span><input id="itemName" required maxlength="120"
               placeholder="e.g. Eagle Cement"></label>
-          <label class="field">Category *<input id="itemCategory" list="itemCategories" required maxlength="80"
+          <label class="field"><span class="field-label">Category <span class="required-mark">*</span></span><input id="itemCategory" list="itemCategories" required maxlength="80"
               placeholder="e.g. Cement"><datalist id="itemCategories">
               <option value="Cement"></option><option value="RSB"></option><option value="Aggregates"></option>
               <option value="CHB"></option><option value="Tubulars"></option><option value="Plywood"></option>
@@ -627,12 +653,12 @@
             </datalist></label>
           <label class="field span-2">Description<textarea id="itemDescription" rows="2"
               placeholder="Description from Masterfile Management"></textarea></label>
-          <label class="field">Supplier cost (₱)<input id="itemSupplierCost" type="number" min="0" step="0.01" value="0"
+          <label class="field"><span class="field-label">Supplier cost (₱) <span class="required-mark">*</span></span><input id="itemSupplierCost" type="number" min="0" step="0.01" value="0"
               required></label>
           <label class="field">Supplier<input id="itemSupplier" maxlength="120" placeholder="Supplier name"></label>
           <label class="field">Brands<input id="itemBrand" placeholder="e.g. Eagle, Kenneth"></label>
           <label class="field">Other details<input id="itemOtherDetails" placeholder="Size or specifications"></label>
-          <label class="field">Selling price (₱) *<input id="itemPrice" type="number" min="0" step="0.01" value="0"
+          <label class="field"><span class="field-label">Selling price (₱) <span class="required-mark">*</span></span><input id="itemPrice" type="number" min="0" step="0.01" value="0"
               required></label>
           <label class="field">Re-order point<input id="itemThreshold" type="number" min="0" step="1"
               value="5"></label>
@@ -642,7 +668,7 @@
               value="₱0.00"></label>
           <label class="field">Inventory Cost Value Amount<input id="itemInventoryCostValueAmount" type="text" readonly
               value="₱0.00"></label>
-          <label class="field">Current quantity (on hand) *<input id="itemQuantity" type="number" min="0" step="0.01" value="0"
+          <label class="field"><span class="field-label">Current quantity (on hand) <span class="required-mark">*</span></span><input id="itemQuantity" type="number" min="0" step="0.01" value="0"
               required></label>
           <label class="field">Unit<select id="itemUnit">
               <option value="piece">piece</option><option value="bag">bag</option><option value="kilo">kilo</option>
@@ -718,13 +744,13 @@
       <form id="movementForm">
         <label class="field">Find material<input id="movementSearch" type="search"
             placeholder="Type a name, brand, or SKU to narrow the list" autocomplete="off"></label>
-        <label class="field">Material *<select id="movementItem" required></select></label>
-        <label class="field">Movement type *<select id="movementType">
+        <label class="field"><span class="field-label">Material <span class="required-mark">*</span></span><select id="movementItem" required></select></label>
+        <label class="field"><span class="field-label">Movement type <span class="required-mark">*</span></span><select id="movementType">
             <option value="stock_in">Stock in · received from supplier</option>
             <option value="stock_out">Stock out · used / damaged / manual deduction</option>
             <option value="adjustment">Set exact balance</option>
           </select></label>
-        <label class="field">Quantity *<input id="movementQuantity" type="number" min="0.01" step="0.01" required
+        <label class="field"><span class="field-label">Quantity <span class="required-mark">*</span></span><input id="movementQuantity" type="number" min="0.01" step="0.01" required
             placeholder="Enter quantity"></label>
         <label class="field">Note<textarea id="movementNote" rows="2"
             placeholder="Supplier delivery, damage, adjustment reason..."></textarea></label>
@@ -744,12 +770,12 @@
         <button class="icon-button close-modal" data-close="purchaseModal" aria-label="Close">×</button>
       </div>
       <form id="purchaseForm">
-        <label class="field">Material *<select id="purchaseItem" required></select></label>
-        <label class="field">Purchase type *<select id="purchaseType" required>
+        <label class="field"><span class="field-label">Material <span class="required-mark">*</span></span><select id="purchaseItem" required></select></label>
+        <label class="field"><span class="field-label">Purchase type <span class="required-mark">*</span></span><select id="purchaseType" required>
           <option value="cash">Cash purchase</option><option value="credit">Credit purchase</option>
         </select></label>
-        <label class="field">Quantity received *<input id="purchaseQuantity" type="number" min="0.01" step="0.01" required></label>
-        <label class="field">Cost per unit (₱) *<input id="purchaseUnitCost" type="number" min="0" step="0.01" required></label>
+        <label class="field"><span class="field-label">Quantity received <span class="required-mark">*</span></span><input id="purchaseQuantity" type="number" min="0.01" step="0.01" required></label>
+        <label class="field"><span class="field-label">Cost per unit (₱) <span class="required-mark">*</span></span><input id="purchaseUnitCost" type="number" min="0" step="0.01" required></label>
         <label class="field">Supplier<input id="purchaseSupplier" maxlength="120"></label>
         <label class="field">Invoice / reference<input id="purchaseInvoice" maxlength="120"></label>
         <label class="field hidden" id="purchasePaidField">Initial payment (₱)<input id="purchasePaid" type="number" min="0" step="0.01" value="0"></label>
@@ -770,13 +796,13 @@
         <button class="icon-button close-modal" data-close="lossModal" aria-label="Close">×</button>
       </div>
       <form id="lossForm">
-        <label class="field">Material *<select id="lossItem" required></select></label>
-        <label class="field">Record type *<select id="lossType" required>
+        <label class="field"><span class="field-label">Material <span class="required-mark">*</span></span><select id="lossItem" required></select></label>
+        <label class="field"><span class="field-label">Record type <span class="required-mark">*</span></span><select id="lossType" required>
           <option value="damage">Damaged / write-off (remove stock)</option>
           <option value="supplier_return">Return to supplier (remove stock)</option>
           <option value="customer_return">Customer return (add stock)</option>
         </select></label>
-        <label class="field">Quantity *<input id="lossQuantity" type="number" min="0.01" step="0.01" required></label>
+        <label class="field"><span class="field-label">Quantity <span class="required-mark">*</span></span><input id="lossQuantity" type="number" min="0.01" step="0.01" required></label>
         <label class="field">Note<textarea id="lossNote" rows="2" maxlength="500"></textarea></label>
         <p class="form-error" id="lossError" role="alert"></p>
         <div class="modal-actions"><button type="button" class="secondary-button" data-close="lossModal">Cancel</button>
@@ -794,7 +820,7 @@
         <button class="icon-button close-modal" data-close="paymentModal" aria-label="Close">×</button>
       </div>
       <form id="paymentForm">
-        <label class="field">Payment amount (₱) *<input id="paymentAmount" type="number" min="0.01" step="0.01" required></label>
+        <label class="field"><span class="field-label">Payment amount (₱) <span class="required-mark">*</span></span><input id="paymentAmount" type="number" min="0.01" step="0.01" required></label>
         <label class="field">Note<input id="paymentNote" maxlength="300"></label>
         <p class="form-error" id="paymentError" role="alert"></p>
         <div class="modal-actions"><button type="button" class="secondary-button" data-close="paymentModal">Cancel</button>
@@ -830,7 +856,7 @@
           <button class="secondary-button" id="addOrderLineBtn" type="button">＋ Add item</button>
         </div>
         <div id="orderLines" class="order-lines"></div>
-        <label class="field">Discount (₱)<input id="orderDiscount" type="number" min="0" step="0.01" value="0" required></label>
+        <label class="field"><span class="field-label">Discount (₱) <span class="required-mark">*</span></span><input id="orderDiscount" type="number" min="0" step="0.01" value="0" required></label>
         <label class="field">Note<textarea id="orderNote" rows="2" maxlength="500"
             placeholder="Delivery address, project reference, or payment terms"></textarea></label>
         <div class="order-total"><span>Order subtotal</span><strong id="orderSubtotal">₱0.00</strong></div>
@@ -1047,7 +1073,7 @@
             autocomplete="tel" inputmode="numeric" pattern="[0-9]{11}" required
             placeholder="09123456789"><small>Enter exactly 11 digits.</small></label>
         <label class="field"><span class="field-label">Display name <span class="required-mark">*</span></span><input id="accountDisplayName" maxlength="120" autocomplete="name" required></label>
-        <label class="field">Password <input id="accountPassword" type="password" minlength="8"
+        <label class="field"><span class="field-label">Password <span class="required-mark hidden" id="accountPasswordRequiredMark">*</span></span><input id="accountPassword" type="password" minlength="8"
             autocomplete="new-password"><small id="accountPasswordHint">At least 8 characters.</small></label>
         <label class="field"><span class="field-label">Role <span class="required-mark">*</span></span><select id="accountRole" required>
             <option value="" disabled>Choose role</option>
@@ -1106,10 +1132,10 @@
         <button class="icon-button close-modal" data-close="changePasswordModal" aria-label="Close">×</button>
       </div>
       <form id="changePasswordForm">
-        <label class="field">Current password *<input id="currentPassword" type="password" autocomplete="current-password" required></label>
-        <label class="field">New password *<input id="newPassword" type="password" minlength="8" autocomplete="new-password" required>
+        <label class="field"><span class="field-label">Current password <span class="required-mark">*</span></span><input id="currentPassword" type="password" autocomplete="current-password" required></label>
+        <label class="field"><span class="field-label">New password <span class="required-mark">*</span></span><input id="newPassword" type="password" minlength="8" autocomplete="new-password" required>
           <small>At least 8 characters.</small></label>
-        <label class="field">Confirm new password *<input id="confirmNewPassword" type="password" minlength="8" autocomplete="new-password" required></label>
+        <label class="field"><span class="field-label">Confirm new password <span class="required-mark">*</span></span><input id="confirmNewPassword" type="password" minlength="8" autocomplete="new-password" required></label>
         <p class="form-error" id="changePasswordError" role="alert"></p>
         <div class="modal-actions">
           <button type="button" class="secondary-button" data-close="changePasswordModal">Cancel</button>

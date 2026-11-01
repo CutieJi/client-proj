@@ -9,6 +9,7 @@ A modern, minimal inventory app for the handwritten building-material price list
 - Sales Transactions page modeled on the workbook tab, with month/year selectors, the workbook's item-level columns and sales/COGS/quantity/profit totals shown in cards outside the transaction panel, derived from saved client orders and connected to Monthly Summary without duplicate transaction entry.
 - Sales per day modeled on the workbook's "DAILY SALES AND CUSTOMER" tab, with month/year filters, every calendar day's sales, quantity, COGS, gross profit, discounts and discount rate, plus a customer tracker for the selected month.
 - Direct Purchase and Credit Purchase views in a sidebar dropdown, modeled on the workbook's matching tabs with month/year filters and purchase totals; credit purchases include due dates, paid status, payment history, and remaining balances.
+- Damage Items and Returns Items views in a sidebar dropdown, modeled on their workbook tabs with month/year filters, quantity/value summaries, item details, and separate customer/supplier return types.
 - Optional `supabase/october_sales_transactions.sql` import to load the workbook's October 2026 sales rows into the app's order tables without changing inventory quantities.
 - Inventory table matching the Masterfile Management item fields and item-number order, with live quantity linked to Inventory Monitoring
 - Summary cards matching the Masterfile's beginning inventory quantity, retail inventory amount, and inventory cost value; Inventory includes the Masterfile's calculated retail and cost amount columns
@@ -19,7 +20,7 @@ A modern, minimal inventory app for the handwritten building-material price list
 - Stock-in, stock-out, and adjustment forms
 - Stock movement history
 - Cash and credit purchase recording, supplier invoices, due dates, credit payment history, and automatic stock additions
-- Damage and supplier/customer return records with atomic stock-balance updates
+- Damage and supplier/customer return records with atomic stock-balance updates, reviewed in the matching workbook-style monthly views
 - Order discounts, cost-of-goods tracking, daily net sales/profit, and annual monthly purchase/sales summaries
 - Client order entry with saved order history, order totals, automatic stock deductions, and required client name, address, email, and 11-digit phone details
 - Customer database with addresses and a per-customer purchase history, including purchase dates, items, receipts, and totals

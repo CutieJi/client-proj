@@ -811,6 +811,10 @@ h1 {
     margin-bottom: 22px
 }
 
+.dashboard-stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr))
+}
+
 .dashboard-year-field {
     min-width: 120px;
     margin: 0
