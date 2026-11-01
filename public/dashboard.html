@@ -37,11 +37,15 @@
           <path d="M14 8a.5.5 0 0 1-.5.5H3.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 0 1 .708.708L3.707 7.5H13.5A.5.5 0 0 1 14 8m-12-5a.5.5 0 0 1 .5-.5h9.793l-2.147-2.146a.5.5 0 0 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L12.293 3.5H2.5A.5.5 0 0 1 2 3" transform="translate(0 2)" />
         </svg></span> Stock movements
       </button>
-      <button class="nav-link" data-view="purchases">
+      <button class="nav-link nav-parent" id="purchasesNavToggle" type="button" aria-expanded="false" aria-controls="purchasesSubnav">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
           <path d="M2 2h12v2H2zm1 3h10l1 10H2zm3 2v1h4V7z"/>
-        </svg></span> Purchases / credit
+        </svg></span><span class="nav-parent-label">Purchases / credit</span><span class="nav-chevron" aria-hidden="true">⌄</span>
       </button>
+      <div class="nav-submenu" id="purchasesSubnav" hidden>
+        <button class="nav-link nav-sub-link" type="button" data-view="purchases-direct">Direct purchase</button>
+        <button class="nav-link nav-sub-link" type="button" data-view="purchases-credit">Credit purchase</button>
+      </div>
       <button class="nav-link" data-view="losses">
         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false">
           <path d="M8 1 1 14h14zm0 4 4.5 8h-9zM7.25 7h1.5v3h-1.5zm0 4h1.5v1.5h-1.5z"/>
@@ -189,30 +193,12 @@
         </div>
         <!-- Sales Stats -->
         <div class="stats-grid hidden" id="salesStatsGrid">
-          <article class="stat-card">
-            <div class="stat-top"><span>Total revenue</span></div>
-            <strong id="salesTotalRevenue">₱0.00</strong><small>All completed orders</small>
-          </article>
-          <article class="stat-card">
-            <div class="stat-top"><span>Total orders</span></div>
-            <strong id="salesTotalOrders">0</strong><small>Orders placed</small>
-          </article>
-          <article class="stat-card">
-            <div class="stat-top"><span>Total items sold / deducted</span></div>
-            <strong id="salesTotalItems">0</strong><small>Units deducted from inventory</small>
-          </article>
-          <article class="stat-card">
-            <div class="stat-top"><span>Total discounts</span></div>
-            <strong id="salesTotalDiscounts">₱0.00</strong><small>Discounts applied to orders</small>
-          </article>
-          <article class="stat-card">
-            <div class="stat-top"><span>Gross profit</span></div>
-            <strong id="salesGrossProfit">₱0.00</strong><small>Net sales less cost of goods sold</small>
-          </article>
-          <article class="stat-card">
-            <div class="stat-top"><span>Today's sales</span></div>
-            <strong id="salesTodayRevenue">₱0.00</strong><small id="salesTodayCount">0 orders today</small>
-          </article>
+          <article class="stat-card"><div class="stat-top"><span>Total sales</span></div><strong id="salesTotalRevenue">₱0.00</strong><small>Selected month</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Quantity</span></div><strong id="salesTotalItems">0</strong><small>Units sold · selected month</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Cost of good sold</span></div><strong id="salesTotalCost">₱0.00</strong><small>Selected month</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Gross profit</span></div><strong id="salesGrossProfit">₱0.00</strong><small>Net sales less cost of goods sold</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Discount applied</span></div><strong id="salesTotalDiscounts">₱0.00</strong><small>Selected month</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Discount rate applied</span></div><strong id="salesDiscountRate">0.00%</strong><small>Discount ÷ sales before discount</small></article>
         </div>
 
         <!-- INVENTORY PANEL -->
@@ -350,14 +336,25 @@
           <div class="table-footer"><span>Showing stock changes and deductions</span></div>
         </section>
 
+        <div class="toolbar purchase-filters hidden" id="purchaseFilters">
+          <label class="field">Month<select id="purchaseMonth"></select></label>
+          <label class="field">Year<select id="purchaseYear"></select></label>
+          <button class="secondary-button" id="refreshPurchasesBtn" type="button">↻ Refresh</button>
+        </div>
+        <div class="stats-grid purchase-stats-grid hidden" id="purchaseStatsGrid">
+          <article class="stat-card"><div class="stat-top"><span id="purchaseTotalLabel">Total purchased</span></div><strong id="purchaseTotalAmount">₱0.00</strong><small>Selected month</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Quantity purchased</span></div><strong id="purchaseTotalQuantity">0</strong><small>Selected month</small></article>
+          <article class="stat-card hidden" id="purchasePaidCard"><div class="stat-top"><span>Paid amount</span></div><strong id="purchasePaidAmount">₱0.00</strong><small>Selected month</small></article>
+          <article class="stat-card hidden" id="purchaseBalanceCard"><div class="stat-top"><span>Balance to pay</span></div><strong id="purchaseBalanceAmount">₱0.00</strong><small>Selected month</small></article>
+        </div>
         <section class="panel hidden" id="purchasesPanel">
           <div class="panel-header">
-            <div><h2>Cash and credit purchases</h2><p>Record supplier purchases and track credit balances and payments.</p></div>
+            <div><h2 id="purchasesTitle">Purchases</h2><p id="purchasesDescription">Review purchases for the selected month.</p></div>
             <button class="primary-button hidden" id="newPurchaseBtn" type="button">＋ Record purchase</button>
           </div>
           <div class="table-wrap">
-            <table><thead><tr><th>Date</th><th>Material</th><th>Supplier / invoice</th><th>Type / due date</th><th>Quantity</th><th>Cost</th><th>Paid</th><th>Balance</th><th>Action</th></tr></thead>
-              <tbody id="purchasesBody"><tr><td colspan="9" class="empty-cell">Loading purchases…</td></tr></tbody></table>
+            <table id="purchasesTable"><thead><tr id="purchasesTableHead"></tr></thead>
+              <tbody id="purchasesBody"><tr><td colspan="14" class="empty-cell">Loading purchases…</td></tr></tbody></table>
           </div>
           <div class="table-pagination" id="pagination-purchases"></div>
           <div class="table-footer"><span id="purchaseCount">—</span></div>
@@ -480,21 +477,39 @@
         <section class="panel hidden" id="salesPanel">
           <div class="panel-header">
             <div>
-              <h2>Sales per day</h2>
-              <p>Daily sales totals, transaction volume, and items deducted from inventory.</p>
+              <h2>Daily sales and customer</h2>
+              <p>Daily totals and a customer tracker for the selected month, following the workbook.</p>
             </div>
             <button class="secondary-button" id="refreshSalesBtn" type="button">↻ Refresh sales</button>
           </div>
+          <div class="toolbar sales-daily-toolbar">
+            <label class="field">Month<select id="salesMonth"></select></label>
+            <label class="field">Year<select id="salesYear"></select></label>
+          </div>
+          <p class="form-error sales-daily-error" id="salesError" role="alert"></p>
+          <div class="sales-section-heading"><h3>Daily sales</h3></div>
           <div class="table-wrap">
-            <table>
-              <thead><tr><th>Date</th><th>Orders count</th><th>Items sold / deducted</th><th>Discounts</th><th>Net sales</th><th>COGS</th><th>Gross profit</th></tr></thead>
+            <table class="daily-sales-table">
+              <thead><tr><th>Sales date</th><th>Total sales</th><th>Quantity</th><th>Cost of good sold</th><th>Gross profit</th><th>Discount applied</th><th>Discount rate applied</th></tr></thead>
               <tbody id="dailySalesBody">
                 <tr><td colspan="7" class="empty-cell">Loading sales data…</td></tr>
               </tbody>
             </table>
           </div>
           <div class="table-pagination" id="pagination-sales"></div>
-          <div class="table-footer"><span>Sales aggregated per calendar day</span><span>Prices in Philippine pesos (₱)</span></div>
+          <div class="sales-customer-tracker">
+            <div class="sales-section-heading"><h3 id="salesCustomerTrackerHeading">Customer tracker</h3></div>
+            <div class="table-wrap">
+              <table class="customer-tracker-table">
+                <thead><tr><th>Customers</th><th>Quantity</th><th>Sales</th><th>Cost of good sold</th><th>Discount</th><th>Gross profit</th></tr></thead>
+                <tbody id="monthlyCustomersBody">
+                  <tr><td colspan="6" class="empty-cell">Loading customer sales…</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-pagination" id="pagination-sales-customers"></div>
+          </div>
+          <div class="table-footer"><span>Daily sales and customer totals are based on saved client orders</span><span>Prices in Philippine pesos (₱)</span></div>
         </section>
 
         <!-- CUSTOMER DATABASE PANEL -->

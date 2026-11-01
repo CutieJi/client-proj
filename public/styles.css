@@ -503,6 +503,37 @@ button {
     color: #e3ebf7;
 }
 
+.nav-parent-label {
+    flex: 1
+}
+
+.nav-chevron {
+    margin-left: auto;
+    font-size: 15px;
+    transition: transform .15s
+}
+
+.nav-parent[aria-expanded="true"] .nav-chevron {
+    transform: rotate(180deg)
+}
+
+.nav-submenu {
+    display: flex;
+    flex-direction: column;
+    margin: -2px 0 6px 16px;
+    padding-left: 9px;
+    border-left: 1px solid #344253
+}
+
+.nav-submenu[hidden] {
+    display: none
+}
+
+.nav-sub-link {
+    padding: 9px 10px 9px 13px;
+    font-size: 12px
+}
+
 .nav-icon {
     display: inline-flex;
     align-items: center;
@@ -1311,11 +1342,85 @@ h1 {
     margin: 0 21px 16px
 }
 
+.sales-daily-toolbar {
+    flex-wrap: wrap;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line)
+}
+
+.sales-daily-toolbar .field {
+    min-width: 150px
+}
+
+.purchase-filters {
+    flex-wrap: wrap;
+    padding-bottom: 14px
+}
+
+.purchase-filters .field {
+    min-width: 150px
+}
+
+.purchase-stats-grid {
+    margin-bottom: 18px
+}
+
+.purchases-direct-table {
+    min-width: 1250px
+}
+
+.purchases-credit-table {
+    min-width: 1900px
+}
+
+.category-pill.purchase-status-paid {
+    background: var(--green-soft);
+    color: var(--green)
+}
+
+.category-pill.purchase-status-partially-paid {
+    background: var(--amber-soft);
+    color: var(--amber)
+}
+
+.category-pill.purchase-status-unpaid,
+.category-pill.purchase-status-overdue {
+    background: var(--red-soft);
+    color: var(--red)
+}
+
+.sales-daily-error {
+    margin: 0 21px
+}
+
+.sales-daily-error:empty {
+    display: none
+}
+
+.sales-section-heading {
+    padding: 14px 21px 10px
+}
+
+.sales-section-heading h3 {
+    margin: 0;
+    color: #8c3f69;
+    font: 800 13px Manrope, sans-serif
+}
+
+.daily-sales-table,
+.customer-tracker-table {
+    min-width: 900px
+}
+
+.sales-customer-tracker {
+    margin-top: 20px;
+    border-top: 1px solid var(--line)
+}
+
 .inventory-monitoring-table thead th {
     position: sticky;
     top: 0;
-    z-index: 1;
-    background: #fafbfc
+    z-index: 1
 }
 
 .monitoring-stats-grid {
@@ -1331,6 +1436,12 @@ table {
 
 thead {
     background: #fafbfc
+}
+
+.table-wrap thead th {
+    background: #a44c7d;
+    color: #fff;
+    border-color: #9a3f70
 }
 
 th {
@@ -1939,10 +2050,6 @@ body.dark .nav-link.active {
 body.dark .nav-link:hover,
 body.dark tbody tr:hover,
 body.dark thead {
-    background: #1d2a39
-}
-
-body.dark .inventory-monitoring-table thead th {
     background: #1d2a39
 }
 

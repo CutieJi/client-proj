@@ -17,6 +17,7 @@ const state = {
   salesSummary: null,
   user: null,
   view: "dashboard",
+  purchaseType: "cash",
   toastTimer: null,
   itemToDelete: null,
   customerToDelete: null,
@@ -89,6 +90,7 @@ function renderPage(key) {
     orders: renderOrders,
     "sales-transactions": renderSalesTransactions,
     sales: renderDailySales,
+    "sales-customers": renderDailySales,
     customers: renderCustomers,
     "customer-purchases": renderCustomerPurchases,
     users: renderUsers,
@@ -130,7 +132,7 @@ async function loadAll() {
 
     if (state.view === "dashboard") await loadDashboard();
     if (state.view === "transactions") await loadTransactions();
-    if (state.view === "purchases") await loadPurchases();
+    if (state.view === "purchases-direct" || state.view === "purchases-credit") await loadPurchases();
     if (state.view === "losses") await loadLosses();
     if (state.view === "monthly") await loadMonthlySummary();
     if (state.view === "orders") await loadOrders();
@@ -521,30 +523,87 @@ async function loadPurchases() {
     renderPurchases();
   } catch (error) {
     if (error.status === 401) return window.location.replace("/");
-    $("purchasesBody").innerHTML = `<tr><td colspan="9" class="empty-cell">${esc(error.message)}</td></tr>`;
+    $("purchasesBody").innerHTML = `<tr><td colspan="${state.view === "purchases-credit" ? 16 : 9}" class="empty-cell">${esc(error.message)}</td></tr>`;
     $("purchaseCount").textContent = "Unable to load";
   }
 }
 
 function renderPurchases() {
-    const rows = pageRows("purchases", state.purchases);
-    const isAdmin = state.user?.role === "admin";
-    $("purchasesBody").innerHTML = state.purchases.length ? rows.map(purchase => {
-      const balance = Math.max(0, Number(purchase.total_amount) - Number(purchase.amount_paid));
-      const payments = (purchase.inventory_purchase_payments || []).reduce((sum, payment) => sum + Number(payment.amount), 0);
-      return `<tr>
-        <td>${esc(dateTime(purchase.created_at))}</td>
-        <td><div class="material-name">${esc(purchase.inventory_items?.name || "Deleted item")}</div><div class="material-meta">${Number(purchase.quantity).toLocaleString("en-PH")} ${esc(purchase.inventory_items?.unit || "")}</div></td>
-        <td>${esc(purchase.supplier || "—")}<div class="material-meta">${esc(purchase.invoice_number || "No invoice")}</div></td>
-        <td><span class="category-pill">${purchase.type === "purchase_credit" ? "Credit" : "Cash"}</span>${purchase.due_date ? `<div class="material-meta">Due ${esc(dateOnly(purchase.due_date))}</div>` : ""}</td>
-        <td>${Number(purchase.quantity).toLocaleString("en-PH")}</td>
-        <td class="price-cell">${money(purchase.total_amount)}</td>
-        <td class="price-cell">${money(purchase.amount_paid)}${payments > Number(purchase.amount_paid) ? `<div class="material-meta">Payments logged: ${money(payments)}</div>` : ""}</td>
-        <td class="price-cell">${money(balance)}</td>
-        <td>${isAdmin && balance > 0 ? `<button class="small-action" data-purchase-payment="${esc(purchase.id)}">Record payment</button>` : "—"}</td>
-      </tr>`;
-    }).join("") : `<tr><td colspan="9" class="empty-cell">No purchases recorded yet.</td></tr>`;
-    $("purchaseCount").textContent = `Showing ${state.purchases.length} purchase records`;
+  const isCredit = state.view === "purchases-credit";
+  const type = isCredit ? "credit" : "cash";
+  const month = Number($("purchaseMonth").value) || new Date().getMonth() + 1;
+  const year = Number($("purchaseYear").value) || new Date().getFullYear();
+  const allRows = state.purchases.filter(purchase => {
+    const purchaseType = purchase.purchase_type || (purchase.type === "purchase_credit" ? "credit" : "cash");
+    const created = new Date(purchase.created_at);
+    return purchaseType === type && created.getUTCFullYear() === year && created.getUTCMonth() + 1 === month;
+  });
+  const visibleRows = pageRows("purchases", allRows);
+  const isAdmin = state.user?.role === "admin";
+  const amount = allRows.reduce((sum, purchase) => sum + Number(purchase.total_amount || 0), 0);
+  const quantity = allRows.reduce((sum, purchase) => sum + Number(purchase.quantity || 0), 0);
+  const paid = allRows.reduce((sum, purchase) => sum + Number(purchase.amount_paid || 0), 0);
+  const balance = Math.max(0, amount - paid);
+  const monthName = new Intl.DateTimeFormat("en", { month: "long", timeZone: "UTC" })
+    .format(new Date(Date.UTC(year, month - 1, 1)));
+
+  $("purchasesTitle").textContent = isCredit ? "Credit Purchase Transaction" : "Direct Purchase Transaction";
+  $("purchasesDescription").textContent = isCredit
+    ? `${monthName} ${year} supplier credit purchases, due dates, payments, and remaining balances.`
+    : `${monthName} ${year} direct purchases, matching the workbook's purchase transaction columns.`;
+  $("newPurchaseBtn").textContent = `＋ Record ${isCredit ? "credit" : "direct"} purchase`;
+  $("purchasesTable").classList.toggle("purchases-credit-table", isCredit);
+  $("purchasesTable").classList.toggle("purchases-direct-table", !isCredit);
+  $("purchaseTotalLabel").textContent = isCredit ? "Total credit purchased" : "Total purchased";
+  $("purchaseTotalAmount").textContent = money(amount);
+  $("purchaseTotalQuantity").textContent = quantity.toLocaleString("en-PH");
+  $("purchasePaidCard").classList.toggle("hidden", !isCredit);
+  $("purchaseBalanceCard").classList.toggle("hidden", !isCredit);
+  $("purchasePaidAmount").textContent = money(paid);
+  $("purchaseBalanceAmount").textContent = money(balance);
+
+  $("purchasesTableHead").innerHTML = (isCredit
+    ? ["Product SKU/no#", "Date", "Items", "Category", "Description", "Supplier cost", "Selling price", "Invoice#", "Due date", "Paid status", "Quantity", "Amount to pay", "Payments", "Paid amount", "Balance", "Action"]
+    : ["Product SKU/no#", "Date", "Items", "Category", "Description", "Supplier cost", "Selling price", "Quantity", "Purchased amount"]
+  ).map(label => `<th>${label}</th>`).join("");
+  $("purchasesBody").innerHTML = allRows.length ? visibleRows.map(purchase => {
+    const item = purchase.inventory_items || {};
+    const amountPaid = Number(purchase.amount_paid || 0);
+    const remaining = Math.max(0, Number(purchase.total_amount || 0) - amountPaid);
+    const payments = purchase.inventory_purchase_payments || [];
+    const status = remaining <= 0 ? "Paid"
+      : amountPaid > 0 ? "Partially paid"
+        : purchase.due_date && new Date(`${purchase.due_date}T00:00:00Z`) < new Date() ? "Overdue" : "Unpaid";
+    const columns = [
+      `<td>${esc(item.sku || item.item_number || "—")}</td>`,
+      `<td>${esc(dateOnly(purchase.created_at))}</td>`,
+      `<td><div class="material-name">${esc(item.name || "Deleted item")}</div></td>`,
+      `<td>${esc(item.category || "—")}</td>`,
+      `<td>${esc(item.description || "—")}</td>`,
+      `<td class="price-cell">${money(purchase.unit_cost)}</td>`,
+      `<td class="price-cell">${money(item.unit_price)}</td>`
+    ];
+    if (isCredit) {
+      columns.push(
+        `<td>${esc(purchase.invoice_number || "—")}</td>`,
+        `<td>${esc(purchase.due_date ? dateOnly(purchase.due_date) : "—")}</td>`,
+        `<td><span class="category-pill purchase-status-${status.toLowerCase().replaceAll(" ", "-")}">${status}</span></td>`,
+        `<td class="quantity-cell">${Number(purchase.quantity).toLocaleString("en-PH")} ${esc(item.unit || "")}</td>`,
+        `<td class="price-cell">${money(purchase.total_amount)}</td>`,
+        `<td>${payments.length}</td>`,
+        `<td class="price-cell">${money(amountPaid)}</td>`,
+        `<td class="price-cell">${money(remaining)}</td>`,
+        `<td>${isAdmin && remaining > 0 ? `<button class="small-action" data-purchase-payment="${esc(purchase.id)}">Record payment</button>` : "—"}</td>`
+      );
+    } else {
+      columns.push(
+        `<td class="quantity-cell">${Number(purchase.quantity).toLocaleString("en-PH")} ${esc(item.unit || "")}</td>`,
+        `<td class="price-cell">${money(purchase.total_amount)}</td>`
+      );
+    }
+    return `<tr>${columns.join("")}</tr>`;
+  }).join("") : `<tr><td colspan="${isCredit ? 16 : 9}" class="empty-cell">No ${isCredit ? "credit" : "direct"} purchases recorded for ${esc(monthName)} ${year}.</td></tr>`;
+  $("purchaseCount").textContent = `Showing ${allRows.length} ${isCredit ? "credit" : "direct"} purchase records`;
 }
 
 async function loadLosses() {
@@ -923,39 +982,60 @@ function showOrderReceipt(order) {
 
 // SALES PER DAY
 async function loadSalesSummary() {
+  const year = $("salesYear").value || String(new Date().getFullYear());
+  const month = $("salesMonth").value || String(new Date().getMonth() + 1);
+  $("salesError").textContent = "";
   try {
-    const data = await api("/api/sales-summary");
+    const data = await api(`/api/sales-summary?year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}`);
     state.salesSummary = data;
-    $("salesTotalRevenue").textContent = money(data.totalSales);
-    $("salesTotalOrders").textContent = Number(data.totalOrders).toLocaleString("en-PH");
-    $("salesTotalItems").textContent = Number(data.totalItemsSold).toLocaleString("en-PH");
-    $("salesTotalDiscounts").textContent = money(data.totalDiscounts);
-    $("salesGrossProfit").textContent = money(data.grossProfit);
-
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const todayEntry = (data.daily || []).find(d => d.date === todayStr);
-    $("salesTodayRevenue").textContent = money(todayEntry?.total || 0);
-    $("salesTodayCount").textContent = `${todayEntry?.orders || 0} orders today`;
-
     renderDailySales();
   } catch (error) {
     if (error.status === 401) return window.location.replace("/");
-    $("dailySalesBody").innerHTML = `<tr><td colspan="7" class="empty-cell">${esc(error.message)}</td></tr>`;
+    state.salesSummary = null;
+    renderDailySales();
+    $("salesError").textContent = error.message;
   }
 }
 
 function renderDailySales() {
-    const dailyRows = state.salesSummary?.daily || [];
-    const visibleRows = pageRows("sales", dailyRows);
-    $("dailySalesBody").innerHTML = dailyRows.length ? visibleRows.map(row => `<tr>
-      <td><strong>${esc(dateOnly(row.date))}</strong> (${esc(row.date)})</td>
-      <td><strong>${Number(row.orders).toLocaleString("en-PH")}</strong> order${row.orders === 1 ? "" : "s"}</td>
-      <td><strong>${Number(row.itemsSold).toLocaleString("en-PH")}</strong> units deducted</td>
-      <td class="price-cell">${money(row.discounts)}</td>
-      <td class="price-cell"><strong>${money(row.total)}</strong></td>
-      <td class="price-cell">${money(row.costOfGoods)}</td>
-      <td class="price-cell"><strong>${money(row.grossProfit)}</strong></td>
-    </tr>`).join("") : `<tr><td colspan="7" class="empty-cell">No sales recorded yet. Client orders will appear here aggregated daily.</td></tr>`;
+  const data = state.salesSummary || {};
+  const totals = data.totals || {};
+  const dailyRows = data.daily || [];
+  const customerRows = data.customers || [];
+  const month = Number($("salesMonth").value) || new Date().getMonth() + 1;
+  const year = Number($("salesYear").value) || new Date().getFullYear();
+  const monthName = new Intl.DateTimeFormat("en", { month: "long", timeZone: "UTC" })
+    .format(new Date(Date.UTC(year, month - 1, 1)));
+  const percent = value => `${Number(value || 0).toFixed(2)}%`;
+
+  $("salesTotalRevenue").textContent = money(totals.sales);
+  $("salesTotalItems").textContent = Number(totals.quantity || 0).toLocaleString("en-PH");
+  $("salesTotalCost").textContent = money(totals.costOfGoodsSold);
+  $("salesGrossProfit").textContent = money(totals.grossProfit);
+  $("salesTotalDiscounts").textContent = money(totals.discounts);
+  $("salesDiscountRate").textContent = percent(totals.discountRate);
+  $("salesCustomerTrackerHeading").textContent = `${monthName} ${year} Customer Tracker`;
+
+  const visibleDays = pageRows("sales", dailyRows);
+  $("dailySalesBody").innerHTML = dailyRows.length ? visibleDays.map(row => `<tr>
+    <td><strong>${esc(dateOnly(row.date))}</strong></td>
+    <td class="price-cell"><strong>${money(row.sales)}</strong></td>
+    <td class="quantity-cell">${Number(row.quantity || 0).toLocaleString("en-PH")}</td>
+    <td class="price-cell">${money(row.costOfGoodsSold)}</td>
+    <td class="price-cell"><strong>${money(row.grossProfit)}</strong></td>
+    <td class="price-cell">${money(row.discounts)}</td>
+    <td>${percent(row.discountRate)}</td>
+  </tr>`).join("") : `<tr><td colspan="7" class="empty-cell">No daily sales data is available for ${esc(monthName)} ${year}.</td></tr>`;
+
+  const visibleCustomers = pageRows("sales-customers", customerRows);
+  $("monthlyCustomersBody").innerHTML = customerRows.length ? visibleCustomers.map(row => `<tr>
+    <td><strong>${esc(row.customer)}</strong></td>
+    <td class="quantity-cell">${Number(row.quantity || 0).toLocaleString("en-PH")}</td>
+    <td class="price-cell">${money(row.sales)}</td>
+    <td class="price-cell">${money(row.costOfGoodsSold)}</td>
+    <td class="price-cell">${money(row.discounts)}</td>
+    <td class="price-cell"><strong>${money(row.grossProfit)}</strong></td>
+  </tr>`).join("") : `<tr><td colspan="6" class="empty-cell">No customer sales recorded for ${esc(monthName)} ${year}.</td></tr>`;
 }
 
 // CUSTOMER DATABASE
@@ -1153,6 +1233,14 @@ function showApp(user) {
   $("salesTransactionYear").value = String(currentYear);
   $("salesTransactionMonth").innerHTML = $("dashboardMonth").innerHTML;
   $("salesTransactionMonth").value = String(new Date().getMonth() + 1);
+  $("salesYear").innerHTML = $("summaryYear").innerHTML;
+  $("salesYear").value = String(currentYear);
+  $("salesMonth").innerHTML = $("dashboardMonth").innerHTML;
+  $("salesMonth").value = String(new Date().getMonth() + 1);
+  $("purchaseYear").innerHTML = $("summaryYear").innerHTML;
+  $("purchaseYear").value = String(currentYear);
+  $("purchaseMonth").innerHTML = $("dashboardMonth").innerHTML;
+  $("purchaseMonth").value = String(new Date().getMonth() + 1);
 
   // Admin controls inventory editing; staff encodes orders and customers
   $("addItemBtn").classList.toggle("hidden", !isAdmin);
@@ -1165,7 +1253,11 @@ function showApp(user) {
 function setView(view) {
   if (["users", "activity"].includes(view) && state.user?.role !== "admin") view = "inventory";
   state.view = view;
-  document.querySelectorAll(".nav-link").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+  const isPurchaseView = ["purchases-direct", "purchases-credit"].includes(view);
+  document.querySelectorAll(".nav-link[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+  $("purchasesNavToggle").classList.toggle("active", isPurchaseView);
+  $("purchasesSubnav").hidden = !isPurchaseView;
+  $("purchasesNavToggle").setAttribute("aria-expanded", String(!$("purchasesSubnav").hidden));
 
   const isAdmin = state.user?.role === "admin";
 
@@ -1190,10 +1282,15 @@ function setView(view) {
       eyebrow: "STOCK CONTROL",
       subtitle: "Track inventory additions, deductions from client orders, and manual adjustments."
     },
-    purchases: {
-      title: "Purchases and credit",
-      eyebrow: "SUPPLIER MANAGEMENT",
-      subtitle: "Record cash and credit purchases, supplier references, due dates, and payments."
+    "purchases-direct": {
+      title: "Direct purchase",
+      eyebrow: "DIRECT PURCHASES",
+      subtitle: "Review direct purchases by month using the workbook's purchase transaction columns."
+    },
+    "purchases-credit": {
+      title: "Credit purchase",
+      eyebrow: "CREDIT PURCHASES",
+      subtitle: "Review credit invoices, due dates, paid status, and balances by month."
     },
     losses: {
       title: "Damage and returns",
@@ -1216,9 +1313,9 @@ function setView(view) {
       subtitle: "Review item-level sales transactions by month. Recorded client orders are included automatically."
     },
     sales: {
-      title: "Sales per day",
-      eyebrow: "REVENUE & PERFORMANCE",
-      subtitle: "Track daily sales volume, items deducted, and revenue totals."
+      title: "Daily sales and customer",
+      eyebrow: "DAILY SALES & CUSTOMERS",
+      subtitle: "Review workbook-style daily sales totals and customer purchases by month."
     },
     customers: {
       title: "Customer database",
@@ -1246,7 +1343,7 @@ function setView(view) {
   $("addItemBtn").classList.toggle("hidden", view !== "inventory" || !isAdmin);
   $("pageNewOrderBtn").classList.toggle("hidden", view !== "orders");
   $("pageAddCustomerBtn").classList.toggle("hidden", view !== "customers");
-  $("newPurchaseBtn").classList.toggle("hidden", view !== "purchases" || !isAdmin);
+  $("newPurchaseBtn").classList.toggle("hidden", !isPurchaseView || !isAdmin);
   $("newLossBtn").classList.toggle("hidden", view !== "losses" || !isAdmin);
 
   // Toggle stat cards
@@ -1254,6 +1351,8 @@ function setView(view) {
   $("salesStatsGrid").classList.toggle("hidden", view !== "sales");
   $("salesTransactionsControls").classList.toggle("hidden", view !== "sales-transactions");
   $("salesTransactionsStatsGrid").classList.toggle("hidden", view !== "sales-transactions");
+  $("purchaseFilters").classList.toggle("hidden", !isPurchaseView);
+  $("purchaseStatsGrid").classList.toggle("hidden", !isPurchaseView);
   $("statsGrid").classList.toggle("hidden", view !== "inventory");
   $("dashboardStatsGrid").classList.toggle("hidden", view !== "dashboard");
 
@@ -1262,7 +1361,7 @@ function setView(view) {
   $("inventoryPanel").classList.toggle("hidden", view !== "inventory");
   $("inventoryMonitoringPanel").classList.toggle("hidden", view !== "inventory-monitoring");
   $("transactionsPanel").classList.toggle("hidden", view !== "transactions");
-  $("purchasesPanel").classList.toggle("hidden", view !== "purchases");
+  $("purchasesPanel").classList.toggle("hidden", !isPurchaseView);
   $("lossesPanel").classList.toggle("hidden", view !== "losses");
   $("monthlyPanel").classList.toggle("hidden", view !== "monthly");
   $("ordersPanel").classList.toggle("hidden", view !== "orders");
@@ -1276,7 +1375,7 @@ function setView(view) {
   if (view === "inventory") renderItems();
   if (view === "inventory-monitoring") loadInventoryMonitoring();
   if (view === "transactions") loadTransactions();
-  if (view === "purchases") loadPurchases();
+  if (isPurchaseView) loadPurchases();
   if (view === "losses") loadLosses();
   if (view === "monthly") loadMonthlySummary();
   if (view === "orders") loadOrders();
@@ -1401,7 +1500,25 @@ $("salesTransactionYear").addEventListener("change", () => {
 });
 $("refreshSalesTransactionsBtn").addEventListener("click", loadSalesTransactions);
 $("recordSalesTransactionBtn").addEventListener("click", openOrderModal);
+$("salesMonth").addEventListener("change", () => {
+  if (state.pagination.sales) state.pagination.sales.page = 1;
+  if (state.pagination["sales-customers"]) state.pagination["sales-customers"].page = 1;
+  loadSalesSummary();
+});
+$("salesYear").addEventListener("change", () => {
+  if (state.pagination.sales) state.pagination.sales.page = 1;
+  if (state.pagination["sales-customers"]) state.pagination["sales-customers"].page = 1;
+  loadSalesSummary();
+});
 $("dashboardItemFilter").addEventListener("change", renderDashboard);
+$("purchaseMonth").addEventListener("change", () => resetTablePage("purchases", renderPurchases));
+$("purchaseYear").addEventListener("change", () => resetTablePage("purchases", renderPurchases));
+$("refreshPurchasesBtn").addEventListener("click", loadPurchases);
+$("purchasesNavToggle").addEventListener("click", () => {
+  const submenu = $("purchasesSubnav");
+  submenu.hidden = !submenu.hidden;
+  $("purchasesNavToggle").setAttribute("aria-expanded", String(!submenu.hidden));
+});
 $("monthlyPanel").addEventListener("click", event => {
   const button = event.target.closest("[data-closing-save], [data-closing-clear]");
   const row = button?.closest("[data-closing-month]");
@@ -1507,6 +1624,9 @@ $("newPurchaseBtn").addEventListener("click", () => {
   $("purchaseForm").reset();
   $("purchaseItem").innerHTML = inventoryOptions();
   $("purchaseError").textContent = "";
+  state.purchaseType = state.view === "purchases-credit" ? "credit" : "cash";
+  $("purchaseType").value = state.purchaseType;
+  $("purchaseType").disabled = true;
   updatePurchaseFields();
   openModal("purchaseModal");
 });
@@ -1999,7 +2119,7 @@ document.addEventListener("click", event => {
   renderPage(key);
 });
 
-document.querySelectorAll(".nav-link").forEach(b => b.addEventListener("click", () => {
+document.querySelectorAll(".nav-link[data-view]").forEach(b => b.addEventListener("click", () => {
   setView(b.dataset.view);
   $("sidebar").classList.remove("open");
 }));

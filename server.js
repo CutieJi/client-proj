@@ -696,7 +696,7 @@ app.post("/api/items/:id/add-stock", adminRequired, async (req, res) => {
 
 app.get("/api/purchases", async (req, res) => {
   const { data, error } = await fetchAllPages(() => supabase.from("inventory_transactions")
-    .select("id,item_id,type,quantity,supplier,invoice_number,purchase_type,due_date,unit_cost,total_amount,amount_paid,note,created_at,inventory_items(name,unit,sku),inventory_purchase_payments(id,amount,note,created_at)")
+    .select("id,item_id,type,quantity,supplier,invoice_number,purchase_type,due_date,unit_cost,total_amount,amount_paid,note,created_at,inventory_items(item_number,name,unit,sku,category,description,unit_price),inventory_purchase_payments(id,amount,note,created_at)")
     .in("type", ["purchase_cash", "purchase_credit"])
     .order("created_at", { ascending: false }).order("id", { ascending: false }));
   if (error) return fail(res, error);
@@ -1200,45 +1200,98 @@ app.get("/api/orders", async (req, res) => {
 
 // SALES PER DAY
 app.get("/api/sales-summary", async (req, res) => {
+  const rawYear = String(req.query.year || new Date().getFullYear());
+  const rawMonth = String(req.query.month || new Date().getMonth() + 1);
+  const year = Number(rawYear);
+  const monthNumber = Number(rawMonth);
+  if (!/^\d{4}$/.test(rawYear) || !Number.isInteger(year) || year < 2000 || year > 2100
+    || !/^\d{1,2}$/.test(rawMonth) || !Number.isInteger(monthNumber) || monthNumber < 1 || monthNumber > 12) {
+    return res.status(400).json({ error: "Choose a valid month and year." });
+  }
+  const start = new Date(Date.UTC(year, monthNumber - 1, 1)).toISOString();
+  const end = new Date(Date.UTC(year, monthNumber, 1)).toISOString();
   const { data, error } = await fetchAllPages(() => supabase.from("client_orders")
-    .select("id,receipt_number,total,discount_total,created_at,client_name,client_order_items(quantity,line_total,cost_total)")
+    .select("id,total,discount_total,created_at,client_name,client_order_items(quantity,cost_total)")
+    .gte("created_at", start).lt("created_at", end)
     .order("created_at", { ascending: false }).order("id", { ascending: false }));
   if (error) return fail(res, error);
   const salesByDay = new Map();
-  let totalSales = 0;
-  let totalDiscounts = 0;
-  let totalOrders = (data || []).length;
-  let totalItemsSold = 0;
-  let totalCostOfGoods = 0;
+  const customers = new Map();
+  const totals = { sales: 0, quantity: 0, costOfGoodsSold: 0, grossProfit: 0, discounts: 0, discountRate: 0 };
+  let totalOrders = 0;
 
   for (const order of data || []) {
     const day = new Date(order.created_at).toISOString().slice(0, 10);
-    const amount = Number(order.total || 0);
-    const itemsCount = (order.client_order_items || []).reduce((acc, it) => acc + Number(it.quantity || 0), 0);
-    const costOfGoods = (order.client_order_items || []).reduce((sum, item) => sum + Number(item.cost_total || 0), 0);
-    totalItemsSold += itemsCount;
-    totalCostOfGoods += costOfGoods;
-
-    const entry = salesByDay.get(day) || { date: day, orders: 0, total: 0, itemsSold: 0, costOfGoods: 0, grossProfit: 0, discounts: 0 };
+    const sales = Number(order.total || 0);
+    const discounts = Number(order.discount_total || 0);
+    const orderItems = order.client_order_items || [];
+    const quantity = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const costOfGoodsSold = orderItems.reduce((sum, item) => sum + Number(item.cost_total || 0), 0);
+    const grossProfit = sales - costOfGoodsSold;
+    const entry = salesByDay.get(day) || {
+      date: day, orders: 0, sales: 0, quantity: 0, costOfGoodsSold: 0, grossProfit: 0, discounts: 0
+    };
     entry.orders += 1;
-    entry.total += amount;
-    entry.itemsSold += itemsCount;
-    entry.costOfGoods += costOfGoods;
-    entry.grossProfit += amount - costOfGoods;
-    entry.discounts += Number(order.discount_total || 0);
+    entry.sales += sales;
+    entry.quantity += quantity;
+    entry.costOfGoodsSold += costOfGoodsSold;
+    entry.grossProfit += grossProfit;
+    entry.discounts += discounts;
     salesByDay.set(day, entry);
-    totalSales += amount;
-    totalDiscounts += Number(order.discount_total || 0);
+    const customer = String(order.client_name || "").trim() || "Customer not recorded";
+    const customerKey = customer.toLocaleLowerCase("en");
+    const customerEntry = customers.get(customerKey) || {
+      customer, quantity: 0, sales: 0, costOfGoodsSold: 0, discounts: 0, grossProfit: 0
+    };
+    customerEntry.quantity += quantity;
+    customerEntry.sales += sales;
+    customerEntry.costOfGoodsSold += costOfGoodsSold;
+    customerEntry.discounts += discounts;
+    customerEntry.grossProfit += grossProfit;
+    customers.set(customerKey, customerEntry);
+
+    totals.sales += sales;
+    totals.quantity += quantity;
+    totals.costOfGoodsSold += costOfGoodsSold;
+    totals.grossProfit += grossProfit;
+    totals.discounts += discounts;
+    totalOrders += 1;
   }
 
+  totals.discountRate = totals.sales + totals.discounts > 0
+    ? totals.discounts / (totals.sales + totals.discounts) * 100
+    : 0;
+  const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const daily = Array.from({ length: daysInMonth }, (_, index) => {
+    const date = `${year}-${String(monthNumber).padStart(2, "0")}-${String(index + 1).padStart(2, "0")}`;
+    const entry = salesByDay.get(date) || {
+      date, orders: 0, sales: 0, quantity: 0, costOfGoodsSold: 0, grossProfit: 0, discounts: 0
+    };
+    const discountRate = entry.sales + entry.discounts > 0
+      ? entry.discounts / (entry.sales + entry.discounts) * 100
+      : 0;
+    return {
+      ...entry,
+      discountRate,
+      total: entry.sales,
+      itemsSold: entry.quantity,
+      costOfGoods: entry.costOfGoodsSold
+    };
+  });
+  const customerRows = [...customers.values()].sort((a, b) => a.customer.localeCompare(b.customer, undefined, { sensitivity: "base" }));
+
   res.json({
-    totalSales,
+    year,
+    month: monthNumber,
+    totals,
+    customers: customerRows,
+    totalSales: totals.sales,
     totalOrders,
-    totalItemsSold,
-    totalDiscounts,
-    totalCostOfGoods,
-    grossProfit: [...salesByDay.values()].reduce((sum, entry) => sum + entry.grossProfit, 0),
-    daily: [...salesByDay.values()].sort((a, b) => b.date.localeCompare(a.date))
+    totalItemsSold: totals.quantity,
+    totalDiscounts: totals.discounts,
+    totalCostOfGoods: totals.costOfGoodsSold,
+    grossProfit: totals.grossProfit,
+    daily
   });
 });
 
