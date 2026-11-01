@@ -175,9 +175,22 @@ function renderCategories() {
   const cats = [...new Set(state.items.map(x => x.category))].filter(Boolean).sort();
   select.innerHTML = `<option>All categories</option>${cats.map(c => `<option>${esc(c)}</option>`).join("")}`;
   select.value = cats.includes(current) ? current : "All categories";
-  const masterfileCategories = [...new Set(state.items.map(item => item.category).filter(Boolean))]
+  renderItemCategoryOptions();
+}
+
+function renderItemCategoryOptions(selectedCategory = "") {
+  const defaultCategories = [
+    "Cement", "RSB", "Aggregates", "CHB", "Tubulars", "Plywood",
+    "Adhesives / Skimcoat", "Paints", "Pipes & Fittings", "Electrical",
+    "Hardware Items", "Other"
+  ];
+  const categories = [...new Set([
+    ...state.items.map(item => item.category),
+    selectedCategory,
+    ...defaultCategories
+  ].filter(category => typeof category === "string" && category.trim()))]
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-  $("itemCategories").innerHTML = [...new Set([...masterfileCategories, "Other"])]
+  $("itemCategories").innerHTML = categories
     .map(category => `<option value="${esc(category)}"></option>`).join("");
 }
 
@@ -410,6 +423,7 @@ function renderInventoryMonitoring() {
 
 function resetItemForm() {
   $("itemForm").reset();
+  renderItemCategoryOptions();
   $("itemId").value = "";
   $("itemNumber").value = "";
   $("itemQuantity").value = "0";
@@ -448,6 +462,7 @@ function editItem(item) {
     itemNotes: "notes"
   };
   Object.entries(map).forEach(([id, key]) => $(id).value = item[key] ?? "");
+  renderItemCategoryOptions(item.category);
   updateItemAmountPreviews();
   openModal("itemModal");
 }
@@ -1396,7 +1411,23 @@ function setView(view) {
     }
   }[view];
 
-  $("crumbCurrent").textContent = viewMeta.title;
+  const navLink = [...document.querySelectorAll(".nav-link[data-view]")]
+    .find(link => link.dataset.view === view);
+  const navLabel = navLink?.textContent.trim();
+  let navSection = "";
+  if (navLink) {
+    let currentSection = "";
+    for (const element of $("sidebar").children) {
+      if (element.classList.contains("nav-label")) currentSection = element.textContent.trim();
+      if (element === navLink || element.contains(navLink)) {
+        navSection = currentSection;
+        break;
+      }
+    }
+  }
+  const titleCase = text => text.toLowerCase().replace(/\b[a-z]/g, letter => letter.toUpperCase());
+  $("crumbSection").textContent = titleCase(navSection || viewMeta.eyebrow);
+  $("crumbCurrent").textContent = navLabel || viewMeta.title;
   $("pageTitle").textContent = viewMeta.title;
   $("pageEyebrow").textContent = viewMeta.eyebrow;
   $("pageSubtitle").textContent = viewMeta.subtitle;
@@ -2197,6 +2228,7 @@ document.addEventListener("click", event => {
 document.querySelectorAll(".nav-link[data-view]").forEach(b => b.addEventListener("click", () => {
   setView(b.dataset.view);
   $("sidebar").classList.remove("open");
+  $("menuToggle").setAttribute("aria-expanded", "false");
 }));
 
 document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => closeModal(b.dataset.close)));
@@ -2205,6 +2237,13 @@ document.querySelectorAll(".modal-backdrop").forEach(m => m.addEventListener("cl
 }));
 
 document.addEventListener("click", event => {
+  const sidebar = $("sidebar");
+  if (window.matchMedia("(max-width: 720px)").matches
+      && sidebar.classList.contains("open")
+      && !event.target.closest("#sidebar, #menuToggle")) {
+    sidebar.classList.remove("open");
+    $("menuToggle").setAttribute("aria-expanded", "false");
+  }
   if (!event.target.closest("#profileMenu")) closeProfileMenu();
 });
 

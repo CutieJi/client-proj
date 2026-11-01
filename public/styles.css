@@ -657,7 +657,11 @@ button {
     white-space: nowrap
 }
 
-.crumb span {
+.crumb .crumb-section {
+    color: #8992a0
+}
+
+.crumb .crumb-separator {
     padding: 0 9px;
     color: #c0c5cc
 }

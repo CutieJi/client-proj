@@ -98,7 +98,7 @@
       <header class="topbar">
         <button id="menuToggle" class="icon-button menu-toggle" type="button" aria-label="Hide sidebar"
           aria-controls="sidebar" aria-expanded="true">☰</button>
-        <div class="crumb">Workspace <span>/</span> <b id="crumbCurrent">Inventory</b></div>
+        <div class="crumb"><span class="crumb-section" id="crumbSection">Workspace</span><span class="crumb-separator">/</span><b id="crumbCurrent">Inventory</b></div>
         <div class="topbar-right"><span class="connection"><i></i><span id="connectionText">Connecting</span></span>
           <div class="profile-menu" id="profileMenu">
             <button class="profile-trigger" id="profileTrigger" type="button" aria-haspopup="true"
@@ -647,13 +647,7 @@
           <label class="field span-2"><span class="field-label">Items <span class="required-mark">*</span></span><input id="itemName" required maxlength="120"
               placeholder="e.g. Eagle Cement"></label>
           <label class="field"><span class="field-label">Category <span class="required-mark">*</span></span><input id="itemCategory" list="itemCategories" required maxlength="80"
-              placeholder="e.g. Cement"><datalist id="itemCategories">
-              <option value="Cement"></option><option value="RSB"></option><option value="Aggregates"></option>
-              <option value="CHB"></option><option value="Tubulars"></option><option value="Plywood"></option>
-              <option value="Adhesives / Skimcoat"></option><option value="Paints"></option>
-              <option value="Pipes &amp; Fittings"></option><option value="Electrical"></option>
-              <option value="Hardware Items"></option><option value="Other"></option>
-            </datalist></label>
+              placeholder="e.g. Cement"><datalist id="itemCategories"></datalist></label>
           <label class="field span-2">Description<textarea id="itemDescription" rows="2"
               placeholder="Description from Masterfile Management"></textarea></label>
           <label class="field"><span class="field-label">Supplier cost (₱) <span class="required-mark">*</span></span><input id="itemSupplierCost" type="number" min="0" step="0.01" value="0"
