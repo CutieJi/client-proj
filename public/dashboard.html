@@ -509,7 +509,10 @@
               <h2>Daily sales and customer</h2>
               <p>Daily totals and a customer tracker for the selected month, following the workbook.</p>
             </div>
-            <button class="secondary-button" id="refreshSalesBtn" type="button">↻ Refresh sales</button>
+            <div class="sales-panel-actions">
+              <button class="primary-button" id="addManualSaleBtn" type="button">＋ Add manual sale</button>
+              <button class="secondary-button" id="refreshSalesBtn" type="button">↻ Refresh sales</button>
+            </div>
           </div>
           <div class="toolbar sales-daily-toolbar">
             <label class="field">Month<select id="salesMonth"></select></label>
@@ -519,9 +522,9 @@
           <div class="sales-section-heading"><h3>Daily sales</h3></div>
           <div class="table-wrap">
             <table class="daily-sales-table">
-              <thead><tr><th>Sales date</th><th>Total sales</th><th>Quantity</th><th>Cost of good sold</th><th>Gross profit</th><th>Discount applied</th><th>Discount rate applied</th></tr></thead>
+              <thead><tr><th>Sales date</th><th>Source</th><th>Total sales</th><th>Quantity</th><th>Cost of good sold</th><th>Gross profit</th><th>Discount applied</th><th>Discount rate applied</th></tr></thead>
               <tbody id="dailySalesBody">
-                <tr><td colspan="7" class="empty-cell">Loading sales data…</td></tr>
+                <tr><td colspan="8" class="empty-cell">Loading sales data…</td></tr>
               </tbody>
             </table>
           </div>
@@ -538,7 +541,7 @@
             </div>
             <div class="table-pagination" id="pagination-sales-customers"></div>
           </div>
-          <div class="table-footer"><span>Daily sales and customer totals are based on saved client orders</span><span>Prices in Philippine pesos (₱)</span></div>
+          <div class="table-footer"><span>Daily sales include saved client orders and manual entries</span><span>Prices in Philippine pesos (₱)</span></div>
         </section>
 
         <!-- CUSTOMER DATABASE PANEL -->
@@ -822,6 +825,28 @@
         <p class="form-error" id="paymentError" role="alert"></p>
         <div class="modal-actions"><button type="button" class="secondary-button" data-close="paymentModal">Cancel</button>
           <button type="submit" class="primary-button" id="savePaymentBtn">Save payment</button></div>
+      </form>
+    </section>
+  </div>
+
+  <!-- RECORD MANUAL DAILY SALE MODAL -->
+  <div class="modal-backdrop hidden" id="manualSaleModal">
+    <section class="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="manualSaleModalTitle">
+      <div class="modal-heading">
+        <div><p class="eyebrow">DAILY SALES</p><h2 id="manualSaleModalTitle">Add manual sale</h2></div>
+        <button class="icon-button close-modal" data-close="manualSaleModal" aria-label="Close">×</button>
+      </div>
+      <form id="manualSaleForm">
+        <label class="field"><span class="field-label">Sales date <span class="required-mark">*</span></span><input id="manualSaleDate" type="date" required></label>
+        <label class="field">Customer name<input id="manualSaleCustomer" maxlength="120" placeholder="Optional; defaults to Manual sales"></label>
+        <label class="field"><span class="field-label">Quantity sold <span class="required-mark">*</span></span><input id="manualSaleQuantity" type="number" min="0" max="9999999999.99" step="0.01" value="0" required></label>
+        <label class="field"><span class="field-label">Total sales (₱) <span class="required-mark">*</span></span><input id="manualSaleAmount" type="number" min="0.01" step="0.01" required></label>
+        <label class="field"><span class="field-label">Cost of goods sold (₱) <span class="required-mark">*</span></span><input id="manualSaleCost" type="number" min="0" step="0.01" value="0" required></label>
+        <label class="field"><span class="field-label">Discount applied (₱) <span class="required-mark">*</span></span><input id="manualSaleDiscount" type="number" min="0" step="0.01" value="0" required></label>
+        <small>Gross profit is calculated as total sales less cost of goods sold. Manual sales do not change inventory.</small>
+        <p class="form-error" id="manualSaleError" role="alert"></p>
+        <div class="modal-actions"><button type="button" class="secondary-button" data-close="manualSaleModal">Cancel</button>
+          <button type="submit" class="primary-button" id="saveManualSaleBtn">Save sale</button></div>
       </form>
     </section>
   </div>

@@ -1080,13 +1080,16 @@ function renderDailySales() {
   const visibleDays = pageRows("sales", dailyRows);
   $("dailySalesBody").innerHTML = dailyRows.length ? visibleDays.map(row => `<tr>
     <td><strong>${esc(dateOnly(row.date))}</strong></td>
+    <td>${row.manualEntries
+      ? (row.orders ? "Client orders + manual sales" : "Manual sales")
+      : row.orders ? "Client orders" : "—"}</td>
     <td class="price-cell"><strong>${money(row.sales)}</strong></td>
     <td class="quantity-cell">${Number(row.quantity || 0).toLocaleString("en-PH")}</td>
     <td class="price-cell">${money(row.costOfGoodsSold)}</td>
     <td class="price-cell"><strong>${money(row.grossProfit)}</strong></td>
     <td class="price-cell">${money(row.discounts)}</td>
     <td>${percent(row.discountRate)}</td>
-  </tr>`).join("") : `<tr><td colspan="7" class="empty-cell">No daily sales data is available for ${esc(monthName)} ${year}.</td></tr>`;
+  </tr>`).join("") : `<tr><td colspan="8" class="empty-cell">No daily sales data is available for ${esc(monthName)} ${year}.</td></tr>`;
 
   const visibleCustomers = pageRows("sales-customers", customerRows);
   $("monthlyCustomersBody").innerHTML = customerRows.length ? visibleCustomers.map(row => `<tr>
@@ -2033,6 +2036,46 @@ $("exportOrdersBtn").addEventListener("click", async () => {
 
 // Sales per day events
 $("refreshSalesBtn").addEventListener("click", loadSalesSummary);
+$("addManualSaleBtn").addEventListener("click", () => {
+  $("manualSaleForm").reset();
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const year = $("salesYear").value;
+  const month = $("salesMonth").value.padStart(2, "0");
+  const firstDay = `${year}-${month}-01`;
+  const lastDay = new Date(Date.UTC(Number(year), Number(month), 0)).toISOString().slice(0, 10);
+  $("manualSaleDate").min = firstDay;
+  $("manualSaleDate").max = lastDay;
+  $("manualSaleDate").value = today >= firstDay && today <= lastDay ? today : firstDay;
+  $("manualSaleError").textContent = "";
+  openModal("manualSaleModal");
+});
+$("manualSaleForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  $("manualSaleError").textContent = "";
+  const button = $("saveManualSaleBtn");
+  button.disabled = true;
+  try {
+    await api("/api/manual-sales", {
+      method: "POST",
+      body: JSON.stringify({
+        sale_date: $("manualSaleDate").value,
+        customer_name: $("manualSaleCustomer").value,
+        quantity: Number($("manualSaleQuantity").value),
+        sales_amount: Number($("manualSaleAmount").value),
+        cost_of_goods_sold: Number($("manualSaleCost").value),
+        discount: Number($("manualSaleDiscount").value)
+      })
+    });
+    closeModal("manualSaleModal");
+    toast("Manual sale saved.");
+    await loadSalesSummary();
+  } catch (error) {
+    if (error.status === 401) return window.location.replace("/");
+    $("manualSaleError").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
 $("summaryYear").addEventListener("change", loadMonthlySummary);
 
 // Customer database events

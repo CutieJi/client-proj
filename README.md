@@ -21,7 +21,7 @@ A modern, minimal inventory app for the handwritten building-material price list
 - Stock movement history
 - Cash and credit purchase recording, supplier invoices, due dates, credit payment history, and automatic stock additions
 - Damage and supplier/customer return records with atomic stock-balance updates, reviewed in the matching workbook-style monthly views
-- Order discounts, cost-of-goods tracking, daily net sales/profit, and annual monthly purchase/sales summaries
+- Order discounts, cost-of-goods tracking, daily net sales/profit with manual daily sales entries, and annual monthly purchase/sales summaries
 - Client order entry with saved order history, order totals, automatic stock deductions, and required client name, address, email, and 11-digit phone details
 - Customer database with addresses and a per-customer purchase history, including purchase dates, items, receipts, and totals
 - Staff order entry can select a registered customer to prefill their contact details or enter a new client
@@ -53,7 +53,7 @@ A modern, minimal inventory app for the handwritten building-material price list
 1. In Supabase, open **SQL Editor** and run `supabase/schema.sql`.
    If this is an existing installation, rerun the updated schema to add inventory masterfile fields, monthly
    ending-inventory records, purchase/payment tracking, damage/return events, order discounts and cost-of-goods fields,
-   customer addresses, and atomic inventory operations, along with the existing account and activity-log migrations.
+   customer addresses, manual daily sales entries, and atomic inventory operations, along with the existing account and activity-log migrations.
    Existing account emails are preserved when present; accounts without an email or phone number must be completed by an
    administrator before their details are current.
 2. Optional: run `supabase/seed.sql` to insert the transcribed price list. The seed starts all quantities at `0` because the photo contains prices, not stock counts.

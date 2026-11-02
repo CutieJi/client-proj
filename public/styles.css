@@ -1397,6 +1397,13 @@ h1 {
     margin: 0
 }
 
+.sales-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap
+}
+
 .toolbar {
     padding: 0 21px 16px;
     display: flex;
@@ -2579,6 +2586,10 @@ body.dark .table-footer {
 
     .panel-header .secondary-button {
         padding: 8px
+    }
+
+    .sales-panel-actions {
+        width: 100%
     }
 
     .page-foot {

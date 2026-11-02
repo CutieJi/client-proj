@@ -215,7 +215,7 @@ app.use("/api", (req, res, next) => {
   requireAuth(req, res, next);
 });
 
-app.use(["/api/items", "/api/summary", "/api/transactions", "/api/orders", "/api/customers", "/api/sales-summary", "/api/sales-transactions"], staffRequired);
+app.use(["/api/items", "/api/summary", "/api/transactions", "/api/orders", "/api/customers", "/api/sales-summary", "/api/sales-transactions", "/api/manual-sales"], staffRequired);
 
 app.get("/api/auth/me", (req, res) => res.json({ user: req.user }));
 
@@ -1199,6 +1199,49 @@ app.get("/api/orders", async (req, res) => {
 });
 
 // SALES PER DAY
+app.post("/api/manual-sales", async (req, res) => {
+  const saleDate = typeof req.body?.sale_date === "string" ? req.body.sale_date : "";
+  const customerName = typeof req.body?.customer_name === "string" ? req.body.customer_name.trim() : "";
+  const quantity = req.body?.quantity;
+  const salesAmount = req.body?.sales_amount;
+  const costOfGoodsSold = req.body?.cost_of_goods_sold;
+  const discount = req.body?.discount;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(saleDate) ? new Date(`${saleDate}T00:00:00.000Z`) : null;
+  const validAmount = value => typeof value === "number" && Number.isFinite(value)
+    && value >= 0 && value <= 1_000_000_000_000_000
+    && Number.isSafeInteger(Math.round(value * 100))
+    && Math.abs(value * 100 - Math.round(value * 100)) < 0.00001;
+  if (!date || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== saleDate
+    || date.getUTCFullYear() < 2000 || date.getUTCFullYear() > 2100) {
+    return res.status(400).json({ error: "Enter a valid sales date between 2000 and 2100." });
+  }
+  if (customerName.length > 120) {
+    return res.status(400).json({ error: "Customer name must be 120 characters or fewer." });
+  }
+  if (typeof quantity !== "number" || !validAmount(quantity) || quantity > 9_999_999_999.99
+    || !validAmount(salesAmount) || salesAmount <= 0
+    || !validAmount(costOfGoodsSold) || !validAmount(discount)) {
+    return res.status(400).json({ error: "Enter valid quantities and amounts (up to two decimal places); total sales must be greater than zero." });
+  }
+  const { data, error } = await supabase.from("manual_sales_entries").insert({
+    sale_date: saleDate,
+    customer_name: customerName || "Manual sales",
+    quantity,
+    sales_amount: salesAmount,
+    cost_of_goods_sold: costOfGoodsSold,
+    discount,
+    created_by: req.user.user_id
+  }).select().single();
+  if (error) return fail(res, error);
+  if (!await recordActivity(req, res, {
+    action: "manual_sale.created",
+    entityType: "manual_sale",
+    entityId: data.id,
+    summary: `Manual sale of ₱${salesAmount.toFixed(2)} recorded for ${saleDate}.`
+  })) return;
+  res.status(201).json(data);
+});
+
 app.get("/api/sales-summary", async (req, res) => {
   const rawYear = String(req.query.year || new Date().getFullYear());
   const rawMonth = String(req.query.month || new Date().getMonth() + 1);
@@ -1210,35 +1253,40 @@ app.get("/api/sales-summary", async (req, res) => {
   }
   const start = new Date(Date.UTC(year, monthNumber - 1, 1)).toISOString();
   const end = new Date(Date.UTC(year, monthNumber, 1)).toISOString();
-  const { data, error } = await fetchAllPages(() => supabase.from("client_orders")
-    .select("id,total,discount_total,created_at,client_name,client_order_items(quantity,cost_total)")
-    .gte("created_at", start).lt("created_at", end)
-    .order("created_at", { ascending: false }).order("id", { ascending: false }));
-  if (error) return fail(res, error);
+  const startDate = `${year}-${String(monthNumber).padStart(2, "0")}-01`;
+  const endDate = new Date(Date.UTC(year, monthNumber, 1)).toISOString().slice(0, 10);
+  const [ordersResult, manualSalesResult] = await Promise.all([
+    fetchAllPages(() => supabase.from("client_orders")
+      .select("id,total,discount_total,created_at,client_name,client_order_items(quantity,cost_total)")
+      .gte("created_at", start).lt("created_at", end)
+      .order("created_at", { ascending: false }).order("id", { ascending: false })),
+    fetchAllPages(() => supabase.from("manual_sales_entries")
+      .select("id,sale_date,customer_name,quantity,sales_amount,cost_of_goods_sold,discount")
+      .gte("sale_date", startDate).lt("sale_date", endDate)
+      .order("sale_date", { ascending: false }).order("id", { ascending: false }))
+  ]);
+  if (ordersResult.error) return fail(res, ordersResult.error);
+  if (manualSalesResult.error) return fail(res, manualSalesResult.error);
   const salesByDay = new Map();
   const customers = new Map();
   const totals = { sales: 0, quantity: 0, costOfGoodsSold: 0, grossProfit: 0, discounts: 0, discountRate: 0 };
   let totalOrders = 0;
+  let totalManualEntries = 0;
 
-  for (const order of data || []) {
-    const day = new Date(order.created_at).toISOString().slice(0, 10);
-    const sales = Number(order.total || 0);
-    const discounts = Number(order.discount_total || 0);
-    const orderItems = order.client_order_items || [];
-    const quantity = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-    const costOfGoodsSold = orderItems.reduce((sum, item) => sum + Number(item.cost_total || 0), 0);
+  function addSale(day, customerName, sales, discounts, quantity, costOfGoodsSold, source) {
     const grossProfit = sales - costOfGoodsSold;
     const entry = salesByDay.get(day) || {
-      date: day, orders: 0, sales: 0, quantity: 0, costOfGoodsSold: 0, grossProfit: 0, discounts: 0
+      date: day, orders: 0, manualEntries: 0, sales: 0, quantity: 0, costOfGoodsSold: 0, grossProfit: 0, discounts: 0
     };
-    entry.orders += 1;
+    if (source === "order") entry.orders += 1;
+    else entry.manualEntries += 1;
     entry.sales += sales;
     entry.quantity += quantity;
     entry.costOfGoodsSold += costOfGoodsSold;
     entry.grossProfit += grossProfit;
     entry.discounts += discounts;
     salesByDay.set(day, entry);
-    const customer = String(order.client_name || "").trim() || "Customer not recorded";
+    const customer = String(customerName || "").trim() || "Customer not recorded";
     const customerKey = customer.toLocaleLowerCase("en");
     const customerEntry = customers.get(customerKey) || {
       customer, quantity: 0, sales: 0, costOfGoodsSold: 0, discounts: 0, grossProfit: 0
@@ -1255,7 +1303,33 @@ app.get("/api/sales-summary", async (req, res) => {
     totals.costOfGoodsSold += costOfGoodsSold;
     totals.grossProfit += grossProfit;
     totals.discounts += discounts;
-    totalOrders += 1;
+    if (source === "order") totalOrders += 1;
+    else totalManualEntries += 1;
+  }
+
+  for (const order of ordersResult.data || []) {
+    const day = new Date(order.created_at).toISOString().slice(0, 10);
+    const orderItems = order.client_order_items || [];
+    addSale(
+      day,
+      order.client_name,
+      Number(order.total || 0),
+      Number(order.discount_total || 0),
+      orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+      orderItems.reduce((sum, item) => sum + Number(item.cost_total || 0), 0),
+      "order"
+    );
+  }
+  for (const sale of manualSalesResult.data || []) {
+    addSale(
+      sale.sale_date,
+      sale.customer_name,
+      Number(sale.sales_amount || 0),
+      Number(sale.discount || 0),
+      Number(sale.quantity || 0),
+      Number(sale.cost_of_goods_sold || 0),
+      "manual"
+    );
   }
 
   totals.discountRate = totals.sales + totals.discounts > 0
@@ -1265,7 +1339,7 @@ app.get("/api/sales-summary", async (req, res) => {
   const daily = Array.from({ length: daysInMonth }, (_, index) => {
     const date = `${year}-${String(monthNumber).padStart(2, "0")}-${String(index + 1).padStart(2, "0")}`;
     const entry = salesByDay.get(date) || {
-      date, orders: 0, sales: 0, quantity: 0, costOfGoodsSold: 0, grossProfit: 0, discounts: 0
+      date, orders: 0, manualEntries: 0, sales: 0, quantity: 0, costOfGoodsSold: 0, grossProfit: 0, discounts: 0
     };
     const discountRate = entry.sales + entry.discounts > 0
       ? entry.discounts / (entry.sales + entry.discounts) * 100
@@ -1287,6 +1361,7 @@ app.get("/api/sales-summary", async (req, res) => {
     customers: customerRows,
     totalSales: totals.sales,
     totalOrders,
+    totalManualEntries,
     totalItemsSold: totals.quantity,
     totalDiscounts: totals.discounts,
     totalCostOfGoods: totals.costOfGoodsSold,

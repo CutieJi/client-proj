@@ -235,6 +235,20 @@ create table if not exists public.customers (
 create index if not exists customers_name_idx on public.customers(name);
 alter table public.customers enable row level security;
 
+create table if not exists public.manual_sales_entries (
+  id uuid primary key default gen_random_uuid(),
+  sale_date date not null,
+  customer_name text not null default 'Manual sales',
+  quantity numeric(12,2) not null default 0 check (quantity >= 0),
+  sales_amount numeric(30,2) not null check (sales_amount > 0),
+  cost_of_goods_sold numeric(30,2) not null default 0 check (cost_of_goods_sold >= 0),
+  discount numeric(30,2) not null default 0 check (discount >= 0),
+  created_by uuid references public.accounts(user_id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists manual_sales_entries_date_idx on public.manual_sales_entries(sale_date desc);
+alter table public.manual_sales_entries enable row level security;
+
 create table if not exists public.admin_activity_logs (
   id uuid primary key default gen_random_uuid(),
   actor_id uuid references public.accounts(user_id) on delete set null,
