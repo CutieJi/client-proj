@@ -1556,6 +1556,10 @@ h1 {
     border-bottom: 1px solid var(--line)
 }
 
+.sales-transaction-toolbar {
+    align-items: flex-end
+}
+
 .sales-daily-toolbar .field {
     min-width: 150px
 }
