@@ -876,17 +876,35 @@ function renderOrderLines() {
   if (!container) return;
   container.innerHTML = state.orderLines.length ? state.orderLines.map(line => {
     const selectedItem = state.items.find(item => String(item.id) === line.itemId);
-    const options = sortMaterialsAlphabetically(state.items).map(item => `<option value="${esc(item.id)}"${String(item.id) === line.itemId ? " selected" : ""}${Number(item.quantity) <= 0 && String(item.id) !== line.itemId ? " disabled" : ""}>${esc(item.name)}${item.variant ? ` · ${esc(item.variant)}` : ""} (stock: ${Number(item.quantity).toLocaleString("en-PH")})</option>`).join("");
+    const options = orderMaterialOptions(line);
     const quantityMax = selectedItem ? `max="${Number(selectedItem.quantity)}"` : "";
     return `<div class="order-line" data-order-line="${line.id}">
-      <label class="field"><span class="field-label">Material <span class="required-mark">*</span></span><select data-order-item required>
-        <option value="">${state.items.length ? "Select a material" : "No inventory items available"}</option>${options}
-      </select></label>
+      <div class="field"><span class="field-label">Material <span class="required-mark">*</span></span>
+        <input data-order-item-search type="search" aria-label="Search materials for this order item" placeholder="Search name, brand, SKU..." autocomplete="off" value="${esc(line.searchTerm || "")}">
+        <select data-order-item aria-label="Select material" required>${options}</select>
+      </div>
       <label class="field"><span class="field-label">Quantity <span class="required-mark">*</span></span><input data-order-quantity type="number" min="0.01" step="0.01" ${quantityMax} value="${esc(line.quantity)}" required></label>
       <button class="icon-button order-line-remove" type="button" data-order-remove aria-label="Remove item" ${state.orderLines.length === 1 ? "disabled" : ""}>×</button>
     </div>`;
   }).join("") : `<p class="order-lines-empty">Add at least one material to this order.</p>`;
   updateOrderTotal();
+}
+
+function orderMaterialOptions(line) {
+  const selectedId = String(line.itemId || "");
+  const query = String(line.searchTerm || "").trim().toLowerCase();
+  const matches = sortMaterialsAlphabetically(state.items).filter(item =>
+    (String(item.id) === selectedId || Number(item.quantity) > 0) &&
+    [item.name, item.brand, item.variant, item.sku, item.category].join(" ").toLowerCase().includes(query)
+  );
+  const selectedItem = state.items.find(item => String(item.id) === selectedId);
+  if (selectedItem && !matches.some(item => String(item.id) === selectedId)) matches.unshift(selectedItem);
+  const prompt = state.items.length
+    ? query && !matches.length ? "No materials match your search" : "Select a material"
+    : "No inventory items available";
+  return `<option value="">${prompt}</option>` + matches.map(item =>
+    `<option value="${esc(item.id)}"${String(item.id) === selectedId ? " selected" : ""}${Number(item.quantity) <= 0 && String(item.id) !== selectedId ? " disabled" : ""}>${esc(item.name)}${item.variant ? ` · ${esc(item.variant)}` : ""} (stock: ${Number(item.quantity).toLocaleString("en-PH")})</option>`
+  ).join("");
 }
 
 async function loadSalesTransactions() {
@@ -981,7 +999,7 @@ async function openOrderModal() {
   $("orderClientAddress").value = "";
   $("orderClientSelect").disabled = true;
   $("orderClientSelect").innerHTML = `<option value="new">Loading customers from database…</option>`;
-  state.orderLines = [{ id: state.nextOrderLineId++, itemId: "", quantity: "1" }];
+  state.orderLines = [{ id: state.nextOrderLineId++, itemId: "", quantity: "1", searchTerm: "" }];
   renderOrderLines();
   openModal("orderModal");
 
@@ -1938,7 +1956,7 @@ $("orderClientPhone").addEventListener("input", e => {
 });
 
 $("addOrderLineBtn").addEventListener("click", () => {
-  state.orderLines.push({ id: state.nextOrderLineId++, itemId: "", quantity: "1" });
+  state.orderLines.push({ id: state.nextOrderLineId++, itemId: "", quantity: "1", searchTerm: "" });
   renderOrderLines();
 });
 
@@ -1949,6 +1967,7 @@ $("orderLines").addEventListener("change", event => {
   if (!line) return;
   if (event.target.matches("[data-order-item]")) {
     line.itemId = event.target.value;
+    line.searchTerm = "";
     renderOrderLines();
   } else if (event.target.matches("[data-order-quantity]")) {
     line.quantity = event.target.value;
@@ -1957,12 +1976,19 @@ $("orderLines").addEventListener("change", event => {
 });
 
 $("orderLines").addEventListener("input", event => {
-  if (!event.target.matches("[data-order-quantity]")) return;
   const row = event.target.closest("[data-order-line]");
   const line = state.orderLines.find(item => String(item.id) === row?.dataset.orderLine);
   if (!line) return;
-  line.quantity = event.target.value;
-  updateOrderTotal();
+  if (event.target.matches("[data-order-item-search]")) {
+    line.searchTerm = event.target.value;
+    const select = row.querySelector("[data-order-item]");
+    const selectedId = select.value;
+    select.innerHTML = orderMaterialOptions(line);
+    select.value = selectedId;
+  } else if (event.target.matches("[data-order-quantity]")) {
+    line.quantity = event.target.value;
+    updateOrderTotal();
+  }
 });
 
 $("orderLines").addEventListener("click", event => {

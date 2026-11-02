@@ -1839,15 +1839,20 @@ tbody tr:hover {
     background: #101a2c73;
     display: grid;
     place-items: center;
-    padding: 18px;
+    padding: clamp(10px, 3vw, 24px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     z-index: 30
 }
 
 .modal {
     background: var(--surface);
     width: min(620px, 100%);
-    max-height: 90vh;
+    max-height: calc(100vh - 36px);
+    max-height: calc(100dvh - clamp(20px, 6vw, 48px));
+    min-width: 0;
     overflow: auto;
+    overscroll-behavior: contain;
     border-radius: 10px;
     padding: 24px;
     box-shadow: 0 20px 80px #101a2c30
@@ -1861,7 +1866,16 @@ tbody tr:hover {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
+    gap: 12px;
     margin-bottom: 22px
+}
+
+.modal-heading > div {
+    min-width: 0
+}
+
+.modal-heading .close-modal {
+    flex: 0 0 auto
 }
 
 .modal-heading h2 {
@@ -2177,10 +2191,16 @@ tbody tr:hover {
 .modal-actions {
     display: flex;
     justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 8px;
     border-top: 1px solid var(--line);
     margin-top: 18px;
     padding-top: 17px
+}
+
+.modal-actions > button {
+    flex: 0 1 auto;
+    min-width: 0
 }
 
 .form-error {
@@ -2584,7 +2604,7 @@ body.dark .table-footer {
     }
 
     .modal {
-        padding: 19px
+        padding: 17px
     }
 
     .panel-header .secondary-button {
@@ -2597,6 +2617,39 @@ body.dark .table-footer {
 
     .page-foot {
         line-height: 1.6
+    }
+}
+
+@media(max-width:520px) {
+    .modal-backdrop {
+        padding: 8px
+    }
+
+    .modal {
+        max-height: calc(100vh - 16px);
+        max-height: calc(100dvh - 16px);
+        padding: 14px
+    }
+
+    .modal-heading {
+        margin-bottom: 16px
+    }
+
+    .modal-heading h2 {
+        font-size: 17px
+    }
+
+    .modal-actions > button {
+        flex: 1 1 120px
+    }
+
+    .order-line {
+        grid-template-columns: minmax(0, 1fr) 32px;
+        align-items: end
+    }
+
+    .order-line > .field:first-child {
+        grid-column: 1 / -1
     }
 }
 
