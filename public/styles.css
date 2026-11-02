@@ -157,6 +157,7 @@ button {
 }
 
 @media(max-height:700px) {
+
     .login-card.registering .login-brand,
     .login-card.registering>.eyebrow {
         display: none
@@ -168,6 +169,7 @@ button {
 }
 
 @media(max-height:480px) {
+
     .login-brand,
     .login-card>.eyebrow {
         display: none
@@ -1560,7 +1562,8 @@ h1 {
 
 .purchase-filters {
     flex-wrap: wrap;
-    padding-bottom: 14px
+    padding-bottom: 14px;
+    align-items: flex-end
 }
 
 .purchase-filters .field {
@@ -1987,7 +1990,7 @@ tbody tr:hover {
     padding: 10px 0
 }
 
-.receipt-item + .receipt-item {
+.receipt-item+.receipt-item {
     border-top: 1px solid var(--line)
 }
 

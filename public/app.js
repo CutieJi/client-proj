@@ -116,7 +116,7 @@ function stockStatus(item) {
 function sortMaterialsAlphabetically(items) {
   return [...items].sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
-      || (a.variant || "").localeCompare(b.variant || "", undefined, { sensitivity: "base" })
+    || (a.variant || "").localeCompare(b.variant || "", undefined, { sensitivity: "base" })
   );
 }
 
@@ -179,19 +179,26 @@ function renderCategories() {
 }
 
 function renderItemCategoryOptions(selectedCategory = "") {
-  const defaultCategories = [
-    "Cement", "RSB", "Aggregates", "CHB", "Tubulars", "Plywood",
-    "Adhesives / Skimcoat", "Paints", "Pipes & Fittings", "Electrical",
-    "Hardware Items", "Other"
+  const masterfileCategories = [
+    "CEMENT", "RSB", "AGGEGATES", "CHB", "TUBULARS", "CP", "FURRINGS/STUDS",
+    "HARDWARE ITEMS", "PLYWOOD", "PHENOLIC", "ELECTRICAL", "QDE PAINTS",
+    "LATEX PAINTS", "PVC PIPES ORANGE", "PVC PIPES BLUE", "PVC FITTINGS",
+    "ADHESSIVES / SKIMCOAT", "YERO / LISO / GUTTER ", "ANGLE BAR", "GI PIPES",
+    "PVC PANNEL", "STEEL MATTING", "GYPSUM", "FIBER CEMENT BOARDS", "Welding Rod",
+    "Screws", "Neltex Pipes", "Thinner", "Plumbing", "Disc", "Nails", "Boysen",
+    "Buildrite", "Davies", "bostik", "bosny", "pioneer", "royu", "kant", "kroto",
+    "koten", "excel", "Aimee", "DOOR KNOB", "brush", "solar", "coco", "Palochina",
+    "SD", "KD", "OMNI", "PPR", "CASCARA", "TAPE", "THINNER", "LAMCO", "PADLOCK",
+    "ABC", "HAKITO", "Pannel leo", "Pannel yxc"
   ];
   const categories = [...new Set([
-    ...state.items.map(item => item.category),
-    selectedCategory,
-    ...defaultCategories
-  ].filter(category => typeof category === "string" && category.trim()))]
-    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-  $("itemCategories").innerHTML = categories
-    .map(category => `<option value="${esc(category)}"></option>`).join("");
+    ...masterfileCategories,
+    selectedCategory
+  ].filter(category => typeof category === "string" && category.trim()))];
+  const select = $("itemCategory");
+  select.innerHTML = `<option value="" disabled>Select a category</option>${categories
+    .map(category => `<option value="${esc(category)}">${esc(category.trim())}</option>`).join("")}`;
+  select.value = selectedCategory;
 }
 
 async function loadDashboard() {
@@ -660,7 +667,6 @@ function renderLosses() {
   $("lossTotalQuantity").textContent = quantity.toLocaleString("en-PH");
   $("lossSupplierCostCard").classList.toggle("hidden", !isReturns);
   $("lossSupplierCostAmount").textContent = money(supplierCost);
-  $("newLossBtn").textContent = `＋ Record ${isReturns ? "return" : "damage"}`;
   $("damageDescription").textContent = `${monthName} ${year} damaged stock records, matching the workbook columns.`;
   $("returnsDescription").textContent = `${monthName} ${year} customer and supplier returns, matching the workbook columns.`;
 
@@ -736,8 +742,10 @@ function renderMonthlySummary() {
       totals[key] += Number(entry[key] || 0);
     }
     return totals;
-  }, { cashPurchaseQty: 0, cashPurchases: 0, creditPurchaseQty: 0, creditPurchases: 0, salesQty: 0,
-    sales: 0, costOfGoodsSold: 0, grossProfit: 0, returnsQty: 0, returnsAmount: 0, damagedQty: 0, damageAmount: 0 });
+  }, {
+    cashPurchaseQty: 0, cashPurchases: 0, creditPurchaseQty: 0, creditPurchases: 0, salesQty: 0,
+    sales: 0, costOfGoodsSold: 0, grossProfit: 0, returnsQty: 0, returnsAmount: 0, damagedQty: 0, damageAmount: 0
+  });
   $("monthlySummaryTotals").innerHTML = `<tr>
     <th>Total</th>
     <th>${quantity(total.cashPurchaseQty)}</th><th>${money(total.cashPurchases)}</th>
@@ -767,8 +775,8 @@ function renderMonthlyClosings(year, monthNames) {
     return `<tr data-closing-month="${month}">
       <td><strong>${label}</strong></td>
       <td data-label="Ending date"><input data-closing-date type="date" aria-label="${label} ending date" value="${esc(closing?.ending_date || "")}"></td>
-      <td data-label="Ending amount"><input data-closing-amount type="number" min="0" max="9999999999.99" step="0.01" aria-label="${label} ending amount" value="${closing ? esc(closing.ending_amount) : ""}"></td>
-      <td data-label="Ending quantity"><input data-closing-quantity type="number" min="0" max="9999999999.99" step="0.01" aria-label="${label} ending quantity" value="${closing ? esc(closing.ending_quantity) : ""}"></td>
+      <td data-label="Ending amount"><input data-closing-amount type="number" min="0" max="9999999999.99" value="0" step="0.01" aria-label="${label} ending amount" value="${closing ? esc(closing.ending_amount) : ""}"></td>
+      <td data-label="Ending quantity"><input data-closing-quantity type="number" min="0" max="9999999999.99" value="0" step="0.01" aria-label="${label} ending quantity" value="${closing ? esc(closing.ending_quantity) : ""}"></td>
       <td class="monthly-closing-actions" data-label="Action">
         <button type="button" class="small-action" data-closing-save>Save</button>
         ${closing ? `<button type="button" class="small-action" data-closing-clear>Clear</button>` : ""}
@@ -846,21 +854,21 @@ async function loadOrders() {
 }
 
 function renderOrders() {
-    const orders = state.orders;
-    const visibleOrders = pageRows("orders", orders);
-    $("ordersBody").innerHTML = orders.length ? visibleOrders.map(order => {
-      const items = order.client_order_items || [];
-      const itemSummary = items.map(item => `<div class="material-name">${esc(item.item_name)} · <strong>${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)}</strong></div><div class="material-meta">${money(item.line_total)}</div>`).join("");
-      const orderNote = order.note ? `<div class="material-meta">${esc(order.note)}</div>` : "";
-      const contactDetails = [order.client_phone, order.client_email].filter(Boolean).map(esc).join(" · ");
-      return `<tr>
+  const orders = state.orders;
+  const visibleOrders = pageRows("orders", orders);
+  $("ordersBody").innerHTML = orders.length ? visibleOrders.map(order => {
+    const items = order.client_order_items || [];
+    const itemSummary = items.map(item => `<div class="material-name">${esc(item.item_name)} · <strong>${Number(item.quantity).toLocaleString("en-PH")} ${esc(item.unit)}</strong></div><div class="material-meta">${money(item.line_total)}</div>`).join("");
+    const orderNote = order.note ? `<div class="material-meta">${esc(order.note)}</div>` : "";
+    const contactDetails = [order.client_phone, order.client_email].filter(Boolean).map(esc).join(" · ");
+    return `<tr>
         <td>${esc(dateTime(order.created_at))}<div class="material-meta">${esc(`OR-${String(order.receipt_number).padStart(8, "0")}`)}</div></td>
         <td><div class="material-name">${esc(order.client_name)}</div>${contactDetails ? `<div class="material-meta">${contactDetails}</div>` : ""}${orderNote}</td>
         <td>${itemSummary}</td>
         <td class="price-cell">${money(order.total)}${Number(order.discount_total) > 0 ? `<div class="material-meta">Discount: ${money(order.discount_total)}</div>` : ""}</td>
         <td>${esc(order.ordered_by_account?.display_name || "Staff")}</td>
       </tr>`;
-    }).join("") : `<tr><td colspan="5" class="empty-cell">No client orders yet. Staff can record orders to deduct stock.</td></tr>`;
+  }).join("") : `<tr><td colspan="5" class="empty-cell">No client orders yet. Staff can record orders to deduct stock.</td></tr>`;
 }
 
 function renderOrderLines() {
@@ -1256,8 +1264,8 @@ async function loadActivityLogs() {
 }
 
 function renderActivityLogs() {
-    const logs = pageRows("activity", state.activityLogs);
-    $("activityBody").innerHTML = state.activityLogs.length ? logs.map(log => `<tr>
+  const logs = pageRows("activity", state.activityLogs);
+  $("activityBody").innerHTML = state.activityLogs.length ? logs.map(log => `<tr>
       <td>${esc(dateTime(log.created_at))}</td>
       <td>${esc(log.actor_name)}</td>
       <td><span class="category-pill">${esc(({ admin: "Super Admin", staff: "Staff" })[log.actor_role] || log.actor_role)}</span></td>
@@ -1440,7 +1448,8 @@ function setView(view) {
   $("pageNewOrderBtn").classList.toggle("hidden", view !== "orders");
   $("pageAddCustomerBtn").classList.toggle("hidden", view !== "customers");
   $("newPurchaseBtn").classList.toggle("hidden", !isPurchaseView || !isAdmin);
-  $("newLossBtn").classList.toggle("hidden", !isLossView || !isAdmin);
+  $("newDamageBtn").classList.toggle("hidden", view !== "damage" || !isAdmin);
+  $("newReturnBtn").classList.toggle("hidden", view !== "returns" || !isAdmin);
 
   // Toggle stat cards
   $("monitoringStatsGrid").classList.toggle("hidden", view !== "inventory-monitoring");
@@ -1814,14 +1823,17 @@ $("paymentForm").addEventListener("submit", async event => {
   }
 });
 
-$("newLossBtn").addEventListener("click", () => {
+function openLossModal() {
   $("lossForm").reset();
   $("lossItem").innerHTML = inventoryOptions();
   $("lossType").value = state.view === "returns" ? "customer_return" : "damage";
   $("lossModalTitle").textContent = state.view === "returns" ? "Record returned item" : "Record damaged item";
   $("lossError").textContent = "";
   openModal("lossModal");
-});
+}
+
+$("newDamageBtn").addEventListener("click", openLossModal);
+$("newReturnBtn").addEventListener("click", openLossModal);
 
 $("lossForm").addEventListener("submit", async event => {
   event.preventDefault();
@@ -2282,8 +2294,8 @@ document.querySelectorAll(".modal-backdrop").forEach(m => m.addEventListener("cl
 document.addEventListener("click", event => {
   const sidebar = $("sidebar");
   if (window.matchMedia("(max-width: 720px)").matches
-      && sidebar.classList.contains("open")
-      && !event.target.closest("#sidebar, #menuToggle")) {
+    && sidebar.classList.contains("open")
+    && !event.target.closest("#sidebar, #menuToggle")) {
     sidebar.classList.remove("open");
     $("menuToggle").setAttribute("aria-expanded", "false");
   }
