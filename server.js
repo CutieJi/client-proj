@@ -1128,8 +1128,13 @@ app.get("/api/sales-transactions", async (req, res) => {
   if (!/^\d{4}$/.test(rawYear) || !Number.isInteger(year) || year < 2000 || year > 2100) {
     return res.status(400).json({ error: "Choose a valid year." });
   }
-  const start = new Date(Date.UTC(year, 0, 1)).toISOString();
-  const end = new Date(Date.UTC(year + 1, 0, 1)).toISOString();
+  const rawMonth = req.query.month == null ? null : String(req.query.month);
+  const monthNumber = rawMonth == null ? null : Number(rawMonth);
+  if (rawMonth != null && (!/^\d{1,2}$/.test(rawMonth) || !Number.isInteger(monthNumber) || monthNumber < 1 || monthNumber > 12)) {
+    return res.status(400).json({ error: "Choose a valid month." });
+  }
+  const start = new Date(Date.UTC(year, monthNumber == null ? 0 : monthNumber - 1, 1)).toISOString();
+  const end = new Date(Date.UTC(year, monthNumber == null ? 12 : monthNumber, 1)).toISOString();
   const { data: orders, error } = await fetchAllPages(() => supabase.from("client_orders")
     .select("id,receipt_number,client_name,discount_total,created_at,client_order_items(item_id,item_name,unit,quantity,unit_price,line_total,unit_cost,cost_total,inventory_items(item_number,sku,category,description))")
     .gte("created_at", start).lt("created_at", end)

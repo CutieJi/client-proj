@@ -909,9 +909,10 @@ function orderMaterialOptions(line) {
 
 async function loadSalesTransactions() {
   const year = $("salesTransactionYear").value || String(new Date().getFullYear());
+  const month = $("salesTransactionMonth").value || String(new Date().getMonth() + 1);
   $("salesTransactionsError").textContent = "";
   try {
-    const data = await api(`/api/sales-transactions?year=${encodeURIComponent(year)}`);
+    const data = await api(`/api/sales-transactions?year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}`);
     state.salesTransactions = data.months || [];
     renderSalesTransactions();
   } catch (error) {
@@ -1619,7 +1620,10 @@ $("refreshBtn").addEventListener("click", loadAll);
 $("refreshInventoryMonitoringBtn").addEventListener("click", loadInventoryMonitoring);
 $("dashboardYear").addEventListener("change", loadDashboard);
 $("dashboardMonth").addEventListener("change", renderDashboard);
-$("salesTransactionMonth").addEventListener("change", () => resetTablePage("sales-transactions", renderSalesTransactions));
+$("salesTransactionMonth").addEventListener("change", () => {
+  if (state.pagination["sales-transactions"]) state.pagination["sales-transactions"].page = 1;
+  loadSalesTransactions();
+});
 $("salesTransactionYear").addEventListener("change", () => {
   if (state.pagination["sales-transactions"]) state.pagination["sales-transactions"].page = 1;
   loadSalesTransactions();
