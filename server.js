@@ -7,6 +7,7 @@ const ExcelJS = require("exceljs");
 
 const app = express();
 const port = process.env.PORT || 3000;
+const publicDirectory = process.env.PUBLIC_DIR || path.join(__dirname, "public");
 app.use(express.json());
 
 const configured = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -160,13 +161,13 @@ async function recordActivity(req, res, activity, actor = req.user) {
 }
 
 app.get("/dashboard.html", requireAuth, staffRequired, (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "dashboard.html"));
+  res.sendFile(path.join(publicDirectory, "dashboard.html"));
 });
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(publicDirectory, "index.html"));
 });
 app.get(["/admin", "/login.html", "/customer.html", "/customer", "/customers", "/order.html", "/order"], (req, res) => res.redirect("/dashboard.html"));
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(publicDirectory));
 
 app.get("/api/health", (req, res) => res.json({ ok: true, supabaseConfigured: configured }));
 
@@ -1635,7 +1636,7 @@ app.get("/api/orders/export", async (req, res) => {
 });
 
 app.get("/{*path}", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(publicDirectory, "index.html"));
 });
 
 if (require.main === module) {
