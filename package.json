@@ -12,6 +12,7 @@
     "@supabase/supabase-js": "^2.57.0",
     "dotenv": "^16.4.7",
     "exceljs": "^4.4.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "serverless-http": "^4.0.0"
   }
 }

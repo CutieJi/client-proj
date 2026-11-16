@@ -1,0 +1,22 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[functions]
+  external_node_modules = ["express"]
+  node_bundler = "esbuild"
+  included_files = ["public/**"]
+
+[[redirects]]
+  from = "/dashboard.html"
+  to = "/.netlify/functions/server/dashboard.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/server/:splat"
+  status = 200

@@ -112,6 +112,21 @@ development. All static assets, including the dashboard, are in `public/`; the d
 session before serving it. No separate API URL or client-side
 deployment rewrite is needed.
 
+## Deploying to Netlify
+
+Import the repository as a new site in Netlify. The included `netlify.toml` publishes `public/`, deploys the Express
+app as a Netlify Function, and routes requests through it so API endpoints and the authenticated dashboard keep
+working. Netlify installs the dependencies from `package.json`; no build command is required.
+
+In the Netlify site settings, add these environment variables, then deploy:
+
+- `SUPABASE_URL` — your Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` — your Supabase service-role key
+- `NODE_ENV` — `production`
+
+Keep the service-role key in Netlify's environment settings only; do not commit or upload `.env`. Run
+`supabase/schema.sql` in the Supabase SQL Editor if the database has not already been set up.
+
 ## Important security note
 
 The authentication database uses only `public.accounts` for account data; there is no session table. Signed, expiring HTTP-only cookies keep users logged in, and the server checks the account in `accounts` on each request. Password changes invalidate existing cookies; account deletion and role changes take effect immediately. Cookie signatures use a key derived from the server-only Supabase `service_role` key, so no extra session-secret setting is needed; rotating the service key signs out users. The Supabase `service_role` key bypasses Row Level Security and is used by Express on the server only. Never put it in `public/app.js`, browser HTML, a public repository, or a deployed frontend. Keep `.env` private. Accounts store required username, email, phone number, display name, password hash, and role, plus internal ID/creation time. Login, customer registration, and account management use restricted database functions; registration can create customer-role accounts only. Inventory and order-management APIs require a signed-in account, customer ordering APIs require a customer account, and only admins can manage staff, customer, and admin accounts. Customers, staff, and admins can update their own profile; password changes are available from each account menu. Customer registration and order submission are each limited to 10 requests per IP address per 15 minutes. Deploy behind HTTPS and set `NODE_ENV=production` so cookies are marked Secure. Apply `supabase/schema.sql` to create or migrate the account table and required functions; it converts existing `user` roles to `staff` and removes a legacy `app_sessions` table if one exists. If migrating the older `app_users` table, usernames are generated from existing email local parts and existing email values are retained. Older accounts without email or phone details must be updated by an administrator, and existing accounts without passwords need a password set by an administrator before they can sign in.
